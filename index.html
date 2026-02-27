@@ -305,84 +305,24 @@ td:has(.legal-feedback) { white-space: normal !important; min-width: 180px; }
     </div>
 </div>
 
-<!-- MNB Árfolyam Politika Panel -->
+<!-- MNB info bar (replaces radio panel — categorization is now fully automatic) -->
 <div class="row mb-4">
     <div class="col-12">
-        <div class="card border-primary">
-            <div class="card-header bg-primary text-white">
-                <h5 class="card-title mb-0">
-                    <i class="fas fa-exchange-alt me-2"></i>
-                    Árfolyam választási szabályok
-                </h5>
+        <div class="alert alert-info d-flex align-items-center gap-3 py-2 mb-0" role="alert">
+            <i class="bi bi-bank2 fs-5 flex-shrink-0"></i>
+            <div class="small">
+                <strong>Automatikus jogi értékelés (ÁFA tv.):</strong>
+                <span class="ms-1">
+                    <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Jogilag helyes</span>
+                    = teljesítés napján érvényes MNB-árfolyam (T vagy T−1) &nbsp;|&nbsp;
+                    <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>Kérdéses</span>
+                    = más dátum &nbsp;|&nbsp;
+                    <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Nincs egyezés</span>
+                </span>
             </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-8">
-                        <div class="alert alert-info mb-3">
-                            <i class="fas fa-info-circle me-2"></i>
-                            <strong>ÁFA törvény szerint:</strong> A devizás számlán az ÁFA értékének meghatározásához a 
-                            <strong>teljesítés napján érvényes árfolyamot</strong> kell alkalmazni. 
-                            A számla kiállításának napján érvényes árfolyamot csak meghatározott esetekben 
-                            (előlegszámla, folyamatos teljesítés) kell használni.
-                        </div>
-                        
-                        <div class="form-check mb-2">
-                            <input class="form-check-input" type="radio" name="ratePolicy" 
-                                   id="policyPerformance" value="performance" checked>
-                            <label class="form-check-label" for="policyPerformance">
-                                <strong>Teljesítés dátuma szerint (ÁFA törvény szerinti főszabály)</strong>
-                                <br>
-                                <small class="text-muted">
-                                    Az ÁFA értékének meghatározásához a teljesítés napján érvényes árfolyamot kell használni.
-                                </small>
-                            </label>
-                        </div>
-                        
-                        <div class="form-check mb-2">
-                            <input class="form-check-input" type="radio" name="ratePolicy" 
-                                   id="policyIssue" value="issue">
-                            <label class="form-check-label" for="policyIssue">
-                                <strong>Kiállítás dátuma szerint (kivételes esetek)</strong>
-                                <br>
-                                <small class="text-muted">
-                                    Előlegszámla vagy folyamatos teljesítésű számla esetén a kiállítás napján érvényes árfolyam használható.
-                                </small>
-                            </label>
-                        </div>
-                        
-                        <div class="form-check mb-3">
-                            <input class="form-check-input" type="radio" name="ratePolicy" 
-                                   id="policyAuto" value="auto">
-                            <label class="form-check-label" for="policyAuto">
-                                <strong>Automatikus összehasonlítás</strong>
-                                <br>
-                                <small class="text-muted">
-                                    Mindkét dátum árfolyamát megjeleníti és jelzi, hogy melyikkel egyezik a számlán szereplő árfolyam.
-                                </small>
-                            </label>
-                        </div>
-                    </div>
-                    
-                    <div class="col-md-4">
-                        <div class="card bg-light">
-                            <div class="card-body">
-                                <h6 class="card-title">Aktuális választás:</h6>
-                                <div id="policyDescription" class="mb-2">
-                                    Teljesítés dátuma szerint (ÁFA törvény)
-                                </div>
-                                <div class="small text-muted">
-                                    <i class="fas fa-clock me-1"></i>
-                                    Utolsó MNB frissítés: <span id="updateMNB"></span>
-                                </div>
-                                <hr>
-                                <div class="small">
-                                    <strong>Elérhető árfolyamok száma:</strong> 
-                                    <span id="availableRatesCount"></span> nap
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <div class="ms-auto text-nowrap small text-muted">
+                <i class="bi bi-clock me-1"></i>MNB: <span id="updateMNB"></span>
+                &nbsp;|&nbsp;<span id="availableRatesCount"></span> nap
             </div>
         </div>
     </div>
