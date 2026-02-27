@@ -214,23 +214,31 @@ function findColumnIndexes(headerRow) {
 }
 
 // Decimal fix: corrupted exports may omit the decimal point (e.g. "39176" → 391.76).
-// Any rate > 1000 is unrealistic for HUF/EUR, so divide by 100.
-function parseNumber(value) {
+// Any EUR/HUF rate > 1000 is unrealistic, so divide by 100.
+// isRate=true applies this fix; for amounts (which can exceed 1000) do NOT apply it.
+function parseNumber(value, isRate = false) {
     if (value === null || value === undefined || value === '') return null;
-    if (typeof value === 'number') return value > 1000 ? value / 100 : value;
+    if (typeof value === 'number') return (isRate && value > 1000) ? value / 100 : value;
     if (typeof value === 'string') {
+        // Normalize: accept both '.' and ',' as decimal separators; strip thousands separators
         const cleaned = value.replace(/[^\d.,\-]/g, '').replace(',', '.').replace(/\.(?=.*\.)/g, '');
         const n = parseFloat(cleaned);
         if (isNaN(n)) return null;
-        return n > 1000 ? n / 100 : n;
+        return (isRate && n > 1000) ? n / 100 : n;
     }
     return null;
 }
 
 function formatDateForDisplay(v) {
     if (!v) return '-';
-    if (typeof v === 'number') return new Date((v - 25569) * 86400000).toLocaleDateString('hu-HU');
-    return v.toString();
+    if (typeof v === 'number') {
+        // Excel serial date → JS Date → YYYY-MM-DD
+        const d = new Date(Math.round((v - 25569) * 86400000));
+        return d.toISOString().split('T')[0];
+    }
+    // Already a string: normalize to YYYY-MM-DD via formatDate helper (defined in index.html)
+    const normalized = formatDate(v);
+    return normalized || v.toString();
 }
 
 // ─── Data processing ──────────────────────────────────────────────────────────
@@ -266,8 +274,8 @@ function processExcelData(data, headerRowIndex) {
             if (!cur || cur.toString().trim().toUpperCase() !== 'EUR') continue;
         }
 
-        // parseNumber already applies the >1000 ÷100 fix
-        const excelEurRate = ci.eurRate !== -1 ? parseNumber(row[ci.eurRate]) : null;
+        // isRate=true: apply >1000÷100 fix only to the rate column (not to amounts)
+        const excelEurRate = ci.eurRate !== -1 ? parseNumber(row[ci.eurRate], true) : null;
         if (excelEurRate === null) continue;
 
         const invoiceNum     = ci.invoiceNum !== -1 ? (row[ci.invoiceNum] || '') : '';
@@ -300,12 +308,16 @@ function processExcelData(data, headerRowIndex) {
         const matchingGenerated = bestMatch ? bestMatch.generated   : false;
         const dayDifference     = bestMatch ? bestMatch.dayOffset   : null;
 
-        const calculatedHuf = (eurAmount && matchingRate) ? Math.round(eurAmount * matchingRate) : null;
+        const calculatedHuf = (eurAmount && matchingRate)
+            ? parseFloat((eurAmount * matchingRate).toFixed(2))
+            : null;
 
         let difference = null, differencePercent = null, diffClass = '';
         if (hufAmount !== null && calculatedHuf !== null) {
-            difference = hufAmount - calculatedHuf;
-            differencePercent = calculatedHuf !== 0 ? (difference / calculatedHuf * 100) : 0;
+            difference        = parseFloat((hufAmount - calculatedHuf).toFixed(2));
+            differencePercent = calculatedHuf !== 0
+                ? parseFloat((difference / calculatedHuf * 100).toFixed(2))
+                : 0;
             diffClass = Math.abs(difference) < 0.5 ? 'difference-zero'
                        : difference > 0             ? 'difference-positive'
                        :                              'difference-negative';
@@ -455,11 +467,11 @@ function renderTable(data) {
             <td>${row.performanceDateDisplay}</td>
             <td class="text-end" data-n="${row.eurAmount ?? ''}">${fmt(row.eurAmount, 2)}</td>
             <td class="text-end fw-semibold ${invoiceRateClass}" data-n="${row.excelEurRate ?? ''}">${fmt(row.excelEurRate, 2)}</td>
-            <td class="text-end" data-n="${row.hufAmount ?? ''}">${fmt(row.hufAmount, 0)}</td>
+            <td class="text-end" data-n="${row.hufAmount ?? ''}">${fmt(row.hufAmount, 2)}</td>
             <td class="text-end" data-n="${row.matchingRate ?? ''}">${matchRateHtml}</td>
             <td class="text-nowrap">${srcDateHtml}</td>
-            <td class="text-end" data-n="${row.calculatedHuf ?? ''}">${fmt(row.calculatedHuf, 0)}</td>
-            <td class="text-end fw-semibold" data-n="${row.difference ?? ''}">${fmt(row.difference, 0)}</td>
+            <td class="text-end" data-n="${row.calculatedHuf ?? ''}">${fmt(row.calculatedHuf, 2)}</td>
+            <td class="text-end fw-semibold" data-n="${row.difference ?? ''}">${fmt(row.difference, 2)}</td>
             <td class="text-end" data-n="${row.differencePercent ?? ''}">${fmtPct(row.differencePercent)}</td>
             <td class="small">${legalHtml}</td>`;
 
@@ -508,21 +520,6 @@ function renderTable(data) {
                 exportOptions: {
                     columns: ':visible',
                     format: { body: exportBodyFormatter }
-                },
-                // Post-process XLSX: force numeric cell type for rate/amount columns
-                customize: function(xlsx) {
-                    const sheet = xlsx.xl.worksheets['sheet1.xml'];
-                    $('row', sheet).each(function() {
-                        const r = $(this).attr('r');
-                        if (r === '1') return; // skip header row
-                        NUM_COLS_XLSX.forEach(col => {
-                            const cell = $('c[r="' + col + r + '"]', this);
-                            if (cell.length) {
-                                // Remove 't="s"' (string type) so Excel treats value as number
-                                cell.removeAttr('t');
-                            }
-                        });
-                    });
                 }
             }
         ],
@@ -540,23 +537,23 @@ function renderTable(data) {
     });
 }
 
-// Export body formatter: returns raw JS number for numeric columns,
-// plain text for everything else (strips HTML tags).
+// Export body formatter: returns comma-decimal strings (e.g. "360,90") for numeric columns
+// so Excel preserves 2 decimal places and the Hungarian comma separator.
 // Prefers data-n attribute (set in renderTable) over display HTML.
 function exportBodyFormatter(data, row, column, node) {
     if (NUM_COLS_IDX.includes(column)) {
-        // Prefer the raw value stored in data-n
+        // Prefer the raw JS float stored in data-n
         const raw = node ? node.getAttribute('data-n') : null;
-        if (raw !== null && raw !== '') {
-            const n = parseFloat(raw);
-            return isNaN(n) ? '' : n;
+        let n = (raw !== null && raw !== '') ? parseFloat(raw) : NaN;
+        if (isNaN(n)) {
+            // Fallback: strip HTML, parse Hungarian-formatted number
+            const text = String(data).replace(/<[^>]+>/g, '').trim();
+            if (!text || text === '-' || text === '—') return '';
+            n = parseFloat(text.replace(/\s/g, '').replace(/\./g, '').replace(',', '.').replace('%', ''));
         }
-        // Fallback: strip HTML and parse Hungarian-formatted number
-        const text = String(data).replace(/<[^>]+>/g, '').trim();
-        if (text === '-' || text === '—' || text === '') return '';
-        // "1.234,56 %" → remove thousands dots, swap decimal comma, strip %
-        const n = parseFloat(text.replace(/\./g, '').replace(',', '.').replace('%', ''));
-        return isNaN(n) ? text : n;
+        if (isNaN(n)) return '';
+        // Return as string with comma decimal so Excel cells show e.g. "360,90"
+        return n.toFixed(2).replace('.', ',');
     }
     // Strip HTML for non-numeric columns
     return String(data).replace(/<[^>]+>/g, '').trim();
