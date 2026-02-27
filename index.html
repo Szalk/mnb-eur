@@ -199,6 +199,24 @@
 #dataTable {
     width: 100% !important;
 }
+
+/* ── Audit Dashboard ─────────────────────────────── */
+#auditDashboard .card { border-radius: 12px; }
+#auditDashboard .rounded-3 { transition: transform .15s; }
+#auditDashboard .rounded-3:hover { transform: translateY(-2px); }
+
+/* ── Discrepancy row emphasis ────────────────────── */
+.difference-negative td { color: #842029; }
+.difference-positive td { color: #0f5132; }
+
+/* ── No-match row ────────────────────────────────── */
+tr.match-none { background-color: #f8d7da !important; }
+
+/* ── Source date nowrap ──────────────────────────── */
+.text-nowrap { white-space: nowrap; }
+
+/* ── Generated rate superscript ─────────────────── */
+sup.text-danger { font-size: 0.65em; cursor: help; }
     </style>
 </head>
 <body>
@@ -379,6 +397,9 @@
 </div>
 
       
+<!-- Audit Dashboard (populated by renderDashboard) -->
+<div id="auditDashboard" class="row mb-4" style="display:none"></div>
+
 <!-- Data Table -->
 <div class="row">
     <div class="col-12">
@@ -387,16 +408,16 @@
                 <thead>
                     <tr>
                         <th>Számla sorszám</th>
-						<th>Egyezés típusa</th>
+                        <th>Forrás egyezés</th>
                         <th>Kiállítás dátuma</th>
                         <th>Teljesítés dátuma</th>
                         <th>EUR összeg</th>
                         <th>HUF összeg (Excel)</th>
-                        <th>EUR árfolyam (Excel)</th>
-                        <th>MNB árfolyam (teljesítés)</th>
-                        <th>MNB árfolyam (kiállítás)</th>
-                        <th>Egyező árfolyam</th>
-                        <th>Alkalmazott dátum</th>
+                        <th title="A számlán szereplő árfolyam">Számla árfolyam</th>
+                        <th title="MNB hivatalos árfolyam a teljesítés napján">MNB (teljesítés)</th>
+                        <th title="MNB hivatalos árfolyam a kiállítás napján">MNB (kiállítás)</th>
+                        <th title="Legvalószínűbb forrásárfolyam (legjobb egyezés)">Legv. forrás árfolyam</th>
+                        <th title="A forrásárfolyam dátuma és eltolása a referenciadátumtól">Forrás dátum</th>
                         <th>Számított HUF</th>
                         <th>Eltérés (HUF)</th>
                         <th>Eltérés (%)</th>
@@ -525,6 +546,40 @@ function findRateInWindow(targetDate, targetRate, maxDays = 30) {
     results.sort((a, b) => a.dayDiff - b.dayDiff);
     
     return results.length > 0 ? results : null;
+}
+
+// Legjobb forrásárfolyam meghatározása (3 fázis: exact perf → exact issue → ±30 napos ablak)
+function findBestRateMatch(invoiceRate, issueDateStr, perfDateStr) {
+    if (!invoiceRate) return null;
+    const TOL = 0.01;
+    const datesToCheck = [];
+    if (perfDateStr) datesToCheck.push([perfDateStr, 'teljesítés']);
+    if (issueDateStr && issueDateStr !== perfDateStr) datesToCheck.push([issueDateStr, 'kiállítás']);
+    if (!datesToCheck.length && issueDateStr) datesToCheck.push([issueDateStr, 'kiállítás']);
+
+    for (const [date, type] of datesToCheck) {
+        const r = getMnbRate(date, RATE_TYPE.CURRENT_DAY);
+        if (r && r.rate !== null && Math.abs(r.rate - invoiceRate) < TOL) {
+            return { matchType:'exact', anchorType:type, anchorDate:date,
+                     sourceDate:r.appliedDate, sourceRate:r.rate, dayOffset:0, generated:r.generated };
+        }
+    }
+
+    const candidates = [];
+    for (const [date, type] of datesToCheck) {
+        const results = findRateInWindow(date, invoiceRate, 30);
+        if (results) results.forEach(r => candidates.push({ ...r, anchorType:type, anchorDate:date }));
+    }
+    if (!candidates.length) return null;
+
+    candidates.sort((a, b) => a.dayDiff - b.dayDiff || (a.anchorType === 'teljesítés' ? -1 : 1));
+    const best = candidates[0];
+    return {
+        matchType: 'window', anchorType: best.anchorType, anchorDate: best.anchorDate,
+        sourceDate: best.date, sourceRate: best.rate,
+        dayOffset: best.direction === 'backward' ? -best.dayDiff : best.dayDiff,
+        generated: best.generated
+    };
 }
 
 // Előző munkanap keresése
