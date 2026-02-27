@@ -365,20 +365,18 @@ td:has(.legal-feedback) { white-space: normal !important; min-width: 180px; }
                 <thead>
                     <tr>
                         <th>Számla sorszám</th>
-                        <th>Forrás egyezés</th>
+                        <th title="MNB napi / MNB előző napi / ablak egyezés">Forrás egyezés</th>
                         <th>Kiállítás dátuma</th>
                         <th>Teljesítés dátuma</th>
-                        <th>EUR összeg</th>
-                        <th>HUF összeg (Excel)</th>
-                        <th title="A számlán szereplő árfolyam">Számla árfolyam</th>
-                        <th title="MNB hivatalos árfolyam a teljesítés napján">MNB (teljesítés)</th>
-                        <th title="MNB hivatalos árfolyam a kiállítás napján">MNB (kiállítás)</th>
-                        <th title="Legvalószínűbb forrásárfolyam (legjobb egyezés)">Legv. forrás árfolyam</th>
-                        <th title="A forrásárfolyam dátuma és eltolása a referenciadátumtól">Forrás dátum</th>
-                        <th>Számított HUF</th>
-                        <th>Eltérés (HUF)</th>
+                        <th title="Devizás (EUR) nettó összeg a számlán">Számla nettó összege a számla pénznemében</th>
+                        <th title="A számlán alkalmazott árfolyam">Alkalmazott árfolyam</th>
+                        <th title="Forint nettó összeg a számlán">Számla számított nettó összege forintban</th>
+                        <th title="A legjobb egyező MNB-árfolyam">Legv. forrás árfolyam</th>
+                        <th title="Az egyező MNB-árfolyam közzétételének dátuma">Forrás dátum</th>
+                        <th title="Devizás összeg × Legv. forrás árfolyam">Számított HUF</th>
+                        <th title="Számla HUF − Számított HUF">Eltérés (HUF)</th>
                         <th>Eltérés (%)</th>
-                        <th title="ÁFA jogszabályi megfelelőség értékelése">Jogi értékelés</th>
+                        <th title="ÁFA jogszabályi megfelelőség">Jogi értékelés</th>
                     </tr>
                 </thead>
                 <tbody id="tableBody">

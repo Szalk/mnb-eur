@@ -146,7 +146,7 @@ function buildLegalFeedback(bestMatch) {
         return {
             category:  'nincs',
             iconClass: 'bi-x-circle-fill text-danger',
-            badgeHtml: '<span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Nincs egyezés</span>',
+            label:     'Nincs egyezés',
             text:      'Az alkalmazott árfolyam valószínűleg nem felel meg a jogszabályi előírásoknak.'
         };
     }
@@ -158,26 +158,34 @@ function buildLegalFeedback(bestMatch) {
         return {
             category:  'helyes',
             iconClass: 'bi-check-circle-fill text-success',
-            badgeHtml: `<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Teljesítés napja${bestMatch.rateVersion === 'previous' ? ' <small>(T−1)</small>' : ''}</span>`,
+            label:     'Jogilag helyes',
             text:      `Az alkalmazott árfolyam helyes. Alapja: ${bestMatch.ruleName} szerinti dátum (${bestMatch.targetDate}${prevNote}).`
         };
     }
 
-    // Match exists but NOT on fulfillment date → kérdéses
-    const prevNote = bestMatch.rateVersion === 'previous' ? ' (T−1)' : '';
-    let where = '';
-    if (bestMatch.matchType === 'exact' && bestMatch.anchorType === 'kiállítás') {
-        where = `Kiállítás napja${prevNote}`;
-    } else {
-        const sign = bestMatch.dayOffset > 0 ? '+' : '';
-        where = `${sign}${bestMatch.dayOffset}n (${bestMatch.anchorType})`;
-    }
     return {
         category:  'kérdéses',
         iconClass: 'bi-exclamation-triangle-fill text-warning',
-        badgeHtml: `<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>${where}</span>`,
+        label:     'Jogilag kérdéses',
         text:      'Az alkalmazott árfolyam valószínűleg nem felel meg a jogszabályi előírásoknak.'
     };
+}
+
+// Forrás egyezés badge: shows the rate source (MNB napi / MNB előző napi / window / none)
+function buildSourceBadge(bestMatch) {
+    if (!bestMatch) {
+        return '<span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Nincs egyezés</span>';
+    }
+    let label, cls;
+    if (bestMatch.matchType === 'exact') {
+        label = bestMatch.rateVersion === 'previous' ? 'MNB előző napi' : 'MNB napi';
+        cls   = bestMatch.anchorType === 'teljesítés' ? 'bg-success' : 'bg-info';
+    } else {
+        const sign = bestMatch.dayOffset > 0 ? '+' : '';
+        label = `${sign}${bestMatch.dayOffset}n (${bestMatch.anchorType})`;
+        cls   = 'bg-warning text-dark';
+    }
+    return `<span class="badge ${cls}"><i class="bi bi-currency-exchange me-1"></i>${label}</span>`;
 }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -379,11 +387,20 @@ function renderDashboard(data) {
 }
 
 // ─── Table rendering ──────────────────────────────────────────────────────────
+// 13-column layout (0-based index → Excel column letter):
+//  0:A Számla sorszám   1:B Forrás egyezés    2:C Kiállítás dátuma
+//  3:D Teljesítés dátu. 4:E EUR összeg         5:F Alkalmazott árfolyam
+//  6:G HUF (Excel)      7:H Legv. forrás árf.  8:I Forrás dátum
+//  9:J Számított HUF   10:K Eltérés (HUF)     11:L Eltérés (%)
+// 12:M Jogi értékelés
+const NUM_COLS_IDX  = [4, 5, 6, 7, 9, 10, 11]; // numeric column indexes (0-based)
+const NUM_COLS_XLSX = ['E','F','G','H','J','K','L']; // matching Excel column letters
+
 function renderTable(data) {
     tableBody.innerHTML = '';
 
     if (!data.length) {
-        tableBody.innerHTML = '<tr><td colspan="15" class="text-center">Nincs megjeleníthető adat</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="13" class="text-center">Nincs megjeleníthető adat</td></tr>';
         return;
     }
 
@@ -410,7 +427,7 @@ function renderTable(data) {
             if (row.difference < -1) negativeDiff++;
         }
 
-        // Source date + signed offset
+        // Forrás dátum: date + signed offset annotation
         let srcDateHtml = '-';
         if (row.matchingDate) {
             const offsetHtml = (row.dayDifference !== null && row.dayDifference !== 0)
@@ -419,30 +436,31 @@ function renderTable(data) {
             srcDateHtml = row.matchingDate + offsetHtml;
         }
 
+        // Legv. forrás árfolyam cell
         const matchRateHtml = row.matchingRate
             ? `<strong>${fmt(row.matchingRate, 2)}</strong>${row.matchingGenerated ? '<sup class="text-danger ms-1" title="Hétvégi generált árfolyam">*</sup>' : ''}`
             : '<span class="text-danger">—</span>';
 
+        // Highlight invoice rate when it deviates from the matched source rate
         const rateDeviation = (row.matchingRate && row.excelEurRate) ? Math.abs(row.excelEurRate - row.matchingRate) : null;
         const invoiceRateClass = (rateDeviation !== null && rateDeviation >= 0.01) ? 'text-danger fw-bold' : '';
 
         const legalHtml = `<i class="bi ${lf.iconClass} me-1"></i><span class="legal-feedback">${lf.text}</span>`;
 
+        // Raw numeric values stored in data-n for reliable export parsing
         tr.innerHTML = `
             <td>${row.invoiceNum || '-'}</td>
-            <td class="text-center">${lf.badgeHtml}</td>
+            <td class="text-center">${buildSourceBadge(row.bestMatch)}</td>
             <td>${row.issueDateDisplay}</td>
             <td>${row.performanceDateDisplay}</td>
-            <td class="text-end">${fmt(row.eurAmount, 2)}</td>
-            <td class="text-end">${fmt(row.hufAmount, 0)}</td>
-            <td class="text-end fw-semibold ${invoiceRateClass}">${fmt(row.excelEurRate, 2)}</td>
-            <td class="text-end text-muted">${fmt(row.mnbPerfRate, 2)}</td>
-            <td class="text-end text-muted">${fmt(row.mnbIssueRate, 2)}</td>
-            <td class="text-end">${matchRateHtml}</td>
+            <td class="text-end" data-n="${row.eurAmount ?? ''}">${fmt(row.eurAmount, 2)}</td>
+            <td class="text-end fw-semibold ${invoiceRateClass}" data-n="${row.excelEurRate ?? ''}">${fmt(row.excelEurRate, 2)}</td>
+            <td class="text-end" data-n="${row.hufAmount ?? ''}">${fmt(row.hufAmount, 0)}</td>
+            <td class="text-end" data-n="${row.matchingRate ?? ''}">${matchRateHtml}</td>
             <td class="text-nowrap">${srcDateHtml}</td>
-            <td class="text-end">${fmt(row.calculatedHuf, 0)}</td>
-            <td class="text-end fw-semibold">${fmt(row.difference, 0)}</td>
-            <td class="text-end">${fmtPct(row.differencePercent)}</td>
+            <td class="text-end" data-n="${row.calculatedHuf ?? ''}">${fmt(row.calculatedHuf, 0)}</td>
+            <td class="text-end fw-semibold" data-n="${row.difference ?? ''}">${fmt(row.difference, 0)}</td>
+            <td class="text-end" data-n="${row.differencePercent ?? ''}">${fmtPct(row.differencePercent)}</td>
             <td class="small">${legalHtml}</td>`;
 
         tableBody.appendChild(tr);
@@ -471,22 +489,77 @@ function renderTable(data) {
         language: { url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/hu.json' },
         dom: 'Bfrtip',
         buttons: [
-            { extend: 'csv',        text: 'CSV letöltés',   className: 'btn btn-secondary', bom: true },
-            { extend: 'excelHtml5', text: 'Excel letöltés', className: 'btn btn-success',
-              title: 'Adattábla exportálása', exportOptions: { columns: ':visible' } }
+            {
+                extend: 'csv',
+                text: 'CSV letöltés',
+                className: 'btn btn-secondary',
+                bom: true,
+                exportOptions: {
+                    columns: ':visible',
+                    // Use raw data-n attribute for numeric cells → proper decimal point
+                    format: { body: exportBodyFormatter }
+                }
+            },
+            {
+                extend: 'excelHtml5',
+                text: 'Excel letöltés',
+                className: 'btn btn-success',
+                title: 'MNB árfolyam ellenőrzés',
+                exportOptions: {
+                    columns: ':visible',
+                    format: { body: exportBodyFormatter }
+                },
+                // Post-process XLSX: force numeric cell type for rate/amount columns
+                customize: function(xlsx) {
+                    const sheet = xlsx.xl.worksheets['sheet1.xml'];
+                    $('row', sheet).each(function() {
+                        const r = $(this).attr('r');
+                        if (r === '1') return; // skip header row
+                        NUM_COLS_XLSX.forEach(col => {
+                            const cell = $('c[r="' + col + r + '"]', this);
+                            if (cell.length) {
+                                // Remove 't="s"' (string type) so Excel treats value as number
+                                cell.removeAttr('t');
+                            }
+                        });
+                    });
+                }
+            }
         ],
         pageLength: 25,
-        order: [[13, 'desc']],
+        order: [[10, 'desc']], // Eltérés (HUF) descending
         columnDefs: [
-            { type: 'num',     targets: [4,5,6,7,8,9,11,12] },
-            { type: 'num-fmt', targets: [13] },
-            { type: 'string',  targets: [0,1,2,3,10,14] }
+            { type: 'num',     targets: NUM_COLS_IDX.filter(i => i !== 11) },
+            { type: 'num-fmt', targets: [11] },
+            { type: 'string',  targets: [0, 1, 2, 3, 8, 12] }
         ],
         destroy:   true,
         retrieve:  true,
         scrollX:   true,
         responsive: false
     });
+}
+
+// Export body formatter: returns raw JS number for numeric columns,
+// plain text for everything else (strips HTML tags).
+// Prefers data-n attribute (set in renderTable) over display HTML.
+function exportBodyFormatter(data, row, column, node) {
+    if (NUM_COLS_IDX.includes(column)) {
+        // Prefer the raw value stored in data-n
+        const raw = node ? node.getAttribute('data-n') : null;
+        if (raw !== null && raw !== '') {
+            const n = parseFloat(raw);
+            return isNaN(n) ? '' : n;
+        }
+        // Fallback: strip HTML and parse Hungarian-formatted number
+        const text = String(data).replace(/<[^>]+>/g, '').trim();
+        if (text === '-' || text === '—' || text === '') return '';
+        // "1.234,56 %" → remove thousands dots, swap decimal comma, strip %
+        const n = parseFloat(text.replace(/\./g, '').replace(',', '.').replace('%', ''));
+        return isNaN(n) ? text : n;
+    }
+    // Strip HTML for non-numeric columns
+    return String(data).replace(/<[^>]+>/g, '').trim();
 }
 
 // ─── Event handlers ───────────────────────────────────────────────────────────
