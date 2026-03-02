@@ -1,0 +1,340 @@
+/* ===================================
+   DATATABLES CUSTOM STYLING
+   Professional Table Design
+   =================================== */
+
+.table-wrapper {
+    background: var(--bg-card);
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+}
+
+table.dataTable {
+    background: transparent;
+    border-collapse: separate;
+    border-spacing: 0;
+    width: 100% !important;
+}
+
+/* ===================================
+   HEADER STYLES
+   =================================== */
+
+table.dataTable thead th {
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+    color: var(--text-primary);
+    border-bottom: 3px solid var(--primary);
+    border-right: 1px solid rgba(226, 232, 240, 0.3);
+    font-weight: var(--font-bold);
+    text-transform: uppercase;
+    font-size: var(--text-xs);
+    letter-spacing: 0.5px;
+    padding: 16px 12px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    white-space: nowrap;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+table.dataTable thead th:last-child {
+    border-right: none;
+}
+
+table.dataTable thead th.sorting:before,
+table.dataTable thead th.sorting:after,
+table.dataTable thead th.sorting_asc:before,
+table.dataTable thead th.sorting_asc:after,
+table.dataTable thead th.sorting_desc:before,
+table.dataTable thead th.sorting_desc:after {
+    color: var(--primary);
+    opacity: 0.7;
+}
+
+/* ===================================
+   STICKY CÉGNÉV COLUMN
+   =================================== */
+
+table.dataTable thead th.sticky-col,
+table.dataTable tbody td.sticky-col {
+    background: var(--bg-card);
+    font-weight: var(--font-semibold);
+    min-width: 200px;
+    max-width: 250px;
+    position: sticky;
+    left: 0;
+    z-index: 20;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
+    border-right: 1px solid var(--border-color);
+}
+
+table.dataTable thead th.sticky-col {
+    z-index: 30 !important;
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+}
+
+table.dataTable tbody td.sticky-col {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+table.dataTable tbody td.sticky-col .cell-value {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+table.dataTable tbody tr:hover td.sticky-col {
+    background: linear-gradient(90deg, var(--primary-light) 0%, var(--bg-card) 100%);
+}
+
+table.dataTable tbody tr:nth-child(even) td.sticky-col {
+    background: var(--bg-secondary);
+}
+
+table.dataTable tbody tr:nth-child(even):hover td.sticky-col {
+    background: linear-gradient(90deg, var(--primary-light) 0%, var(--bg-secondary) 100%);
+}
+
+/* ===================================
+   BODY ROWS
+   =================================== */
+
+table.dataTable tbody td {
+    border-bottom: 1px solid var(--border-light);
+    border-right: 1px solid rgba(226, 232, 240, 0.2);
+    color: var(--text-primary);
+    padding: 14px 12px;
+    vertical-align: middle;
+    font-size: var(--text-sm);
+    white-space: nowrap;
+}
+
+table.dataTable tbody td:last-child {
+    border-right: none;
+}
+
+table.dataTable tbody tr {
+    transition: all var(--transition-fast) var(--easing);
+}
+
+table.dataTable tbody tr:hover {
+    background: linear-gradient(90deg, var(--primary-light) 0%, transparent 100%);
+    box-shadow: inset 3px 0 0 var(--primary);
+}
+
+table.dataTable tbody tr:nth-child(even) {
+    background: var(--bg-secondary);
+}
+
+table.dataTable tbody tr:nth-child(even):hover {
+    background: linear-gradient(90deg, var(--primary-light) 0%, var(--bg-secondary) 100%);
+}
+
+/* ===================================
+   CELL CONTENT STYLES
+   =================================== */
+
+.cell-index {
+    font-size: var(--text-xs);
+    font-weight: var(--font-semibold);
+    color: var(--text-muted);
+    display: block;
+    text-align: center;
+}
+
+.cell-value {
+    font-weight: var(--font-medium);
+    color: var(--text-primary);
+}
+
+.cell-address {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cell-muted {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+.cell-reason {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    max-width: 400px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ===================================
+   BADGE STYLES IN TABLE
+   =================================== */
+
+.badge.hasonlo { background: #d685ef; }
+.badge.hianyzik { background: #a78bfa; }
+.badge.konform { background: #34d399; }
+.badge.hiba-1 { background: #fb0d0d; }
+.badge.hiba-2 { background: #fb7185; }
+.badge.hiba-3 { background: #c98a14; }
+.badge.hiba-4 { background: #a7236b; }
+.badge.hiba-5 { background: #fdba74; }
+.badge.figyelem-1 { background: #f59e0b; }
+.badge.figyelem-2 { background: #3677bd; }
+.badge.nemSzolgatatosCim { background: #9ca3af; }
+.badge.nincs-bank { background: #bb2f2f; }
+
+/* ===================================
+   DATATABLES CONTROLS
+   =================================== */
+
+.dataTables_wrapper {
+    padding: var(--spacing-lg);
+}
+
+.dataTables_length,
+.dataTables_filter {
+    margin-bottom: var(--spacing-md);
+}
+
+.dataTables_length label,
+.dataTables_filter label {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    color: var(--text-primary);
+    font-weight: var(--font-medium);
+    font-size: var(--text-sm);
+}
+
+.dataTables_length select {
+    padding: 6px 12px;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+}
+
+.dataTables_filter input {
+    padding: 8px 16px;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+    min-width: 250px;
+}
+
+.dataTables_filter input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 4px var(--primary-light);
+}
+
+/* ===================================
+   DATATABLES INFO & PAGINATION
+   =================================== */
+
+.dataTables_info {
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    padding: var(--spacing-md) 0;
+}
+
+.dataTables_paginate {
+    padding: var(--spacing-md) 0;
+}
+
+.dataTables_paginate .paginate_button {
+    padding: 6px 12px;
+    margin: 0 4px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-card);
+    color: var(--text-primary) !important;
+    cursor: pointer;
+    transition: all var(--transition-fast) var(--easing);
+}
+
+.dataTables_paginate .paginate_button:hover {
+    background: var(--bg-tertiary) !important;
+    border-color: var(--primary) !important;
+    color: var(--primary) !important;
+}
+
+.dataTables_paginate .paginate_button.current {
+    background: var(--primary) !important;
+    border-color: var(--primary) !important;
+    color: white !important;
+}
+
+.dataTables_paginate .paginate_button.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ===================================
+   DATATABLES BUTTONS (Export)
+   =================================== */
+
+.dt-buttons {
+    display: inline-flex;
+    gap: var(--spacing-sm);
+    align-items: center;
+}
+
+.btn-export {
+    background: transparent !important;
+    color: var(--text-secondary) !important;
+    border: 1px solid var(--border-color) !important;
+    padding: 6px 12px !important;
+    border-radius: var(--radius-md) !important;
+    font-weight: var(--font-medium) !important;
+    font-size: var(--text-sm) !important;
+    cursor: pointer !important;
+    transition: all var(--transition-base) var(--easing) !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    white-space: nowrap !important;
+}
+
+.btn-export:hover {
+    background: var(--bg-card-hover) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--primary) !important;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md) !important;
+}
+
+.btn-export.btn-excel:hover {
+    color: var(--success) !important;
+    border-color: var(--success) !important;
+}
+
+.btn-export.btn-csv:hover {
+    color: var(--info) !important;
+    border-color: var(--info) !important;
+}
+
+/* ===================================
+   DARK MODE SPECIFIC ADJUSTMENTS
+   =================================== */
+
+[data-bs-theme="dark"] table.dataTable thead th {
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+}
+
+[data-bs-theme="dark"] table.dataTable tbody tr:nth-child(even) {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+[data-bs-theme="dark"] table.dataTable tbody tr:hover {
+    background: linear-gradient(90deg, rgba(var(--primary-rgb), 0.1) 0%, transparent 100%);
+}

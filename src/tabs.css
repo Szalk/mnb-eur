@@ -1,0 +1,233 @@
+/* ===================================
+   TAB NAVIGATION
+   Bootstrap Tabs Custom Styling
+   =================================== */
+
+.tab-navigation {
+    z-index: 999;
+    background: var(--tab-nav-bg);
+    border-bottom: 1px solid var(--tab-nav-border);
+    box-shadow: var(--shadow-sm);
+}
+
+.tab-navigation .container-fluid {
+    padding: 0 var(--spacing-lg);
+}
+
+/* Custom Nav Tabs */
+.nav-tabs-custom {
+    display: flex;
+    gap: var(--spacing-sm);
+    border: none;
+    margin: 0;
+    padding: var(--spacing-sm) 0;
+    list-style: none;
+}
+
+.nav-tabs-custom .nav-item {
+    margin: 0;
+}
+
+.nav-tabs-custom .nav-link {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: 12px 24px;
+    border: 2px solid transparent;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-secondary);
+    font-weight: var(--font-medium);
+    font-size: var(--text-base);
+    cursor: pointer;
+    transition: all var(--transition-base) var(--easing);
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.nav-tabs-custom .nav-link i {
+    font-size: 18px;
+    transition: transform var(--transition-base) var(--easing);
+}
+
+.nav-tabs-custom .nav-link:hover {
+    color: var(--primary);
+    background: var(--primary-light);
+    border-color: transparent;
+}
+
+.nav-tabs-custom .nav-link:hover i {
+    transform: scale(1.1);
+}
+
+.nav-tabs-custom .nav-link.active {
+    background: var(--tab-active-bg);
+    color: var(--tab-active-color);
+    border-color: var(--primary);
+    font-weight: var(--font-semibold);
+    box-shadow: var(--shadow-sm);
+}
+
+.nav-tabs-custom .nav-link.active i {
+    transform: scale(1.1);
+}
+
+/* Focus State */
+.nav-tabs-custom .nav-link:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+/* Disabled State */
+.nav-tabs-custom .nav-link:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    color: var(--text-muted);
+}
+
+.nav-tabs-custom .nav-link:disabled:hover {
+    background: transparent;
+    border-color: transparent;
+}
+
+/* ===================================
+   FILTER PILLS (Tab 2: Analysis)
+   =================================== */
+
+.filter-pills-section {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    box-shadow: var(--shadow-sm);
+}
+
+.filter-pills-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+}
+
+.filter-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: 8px 16px;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-full);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    font-weight: var(--font-medium);
+    cursor: pointer;
+    transition: all var(--transition-base) var(--easing);
+    white-space: nowrap;
+    user-select: none;
+}
+
+.filter-pill:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.filter-pill.active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+    font-weight: var(--font-semibold);
+}
+
+.filter-pill.active:hover {
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
+}
+
+.filter-pill input[type="checkbox"] {
+    display: none;
+}
+
+.filter-pill-icon {
+    font-size: 14px;
+}
+
+/* Icon Colors for Each Filter */
+.filter-pill .filter-pill-icon.icon-all { color: #6B7280; }
+.filter-pill .filter-pill-icon.icon-elemzett { color: #8B5CF6; }
+.filter-pill .filter-pill-icon.icon-megfelelő { color: #10B981; }
+.filter-pill .filter-pill-icon.icon-lejárt { color: #F59E0B; }
+.filter-pill .filter-pill-icon.icon-hiányzó { color: #EF4444; }
+.filter-pill .filter-pill-icon.icon-jogosulatlan { color: #DC2626; }
+.filter-pill .filter-pill-icon.icon-hasonló { color: #6366F1; }
+.filter-pill .filter-pill-icon.icon-eltérő { color: #F97316; }
+.filter-pill .filter-pill-icon.icon-nincs-pénz { color: #64748B; }
+.filter-pill .filter-pill-icon.icon-bankszámla { color: #3B82F6; }
+
+.filter-pill.active .filter-pill-icon {
+    color: white !important;
+}
+
+.filter-pill-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 6px;
+    border-radius: var(--radius-full);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-size: var(--text-xs);
+    font-weight: var(--font-bold);
+}
+
+.filter-pill.active .filter-pill-count {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+/* ===================================
+   TAB PANE ANIMATIONS
+   =================================== */
+
+.tab-pane {
+    animation: fadeInSlide 300ms var(--easing);
+}
+
+@keyframes fadeInSlide {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ===================================
+   RESPONSIVE TAB NAVIGATION
+   =================================== */
+
+@media (max-width: 1440px) {
+    .nav-tabs-custom .nav-link {
+        padding: 10px 18px;
+        font-size: var(--text-sm);
+    }
+
+    .nav-tabs-custom .nav-link i {
+        font-size: 16px;
+    }
+}
+
+@media (max-width: 1280px) {
+    .nav-tabs-custom {
+        overflow-x: auto;
+        scrollbar-width: thin;
+    }
+
+    .nav-tabs-custom::-webkit-scrollbar {
+        height: 4px;
+    }
+}
