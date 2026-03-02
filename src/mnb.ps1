@@ -37,7 +37,7 @@ function Get-MnbFullHistory {
         $webClient.Headers.Add("Content-Type", "text/xml; charset=utf-8")
         $webClient.Encoding = [System.Text.Encoding]::UTF8
 
-        Write-Host "Adatok letoltese..." -NoNewline
+        Write-Host "Adatok letöltése..." -NoNewline
         $response = $webClient.UploadString($url, $ca)
         Write-Host " OK" -ForegroundColor Green
 
@@ -88,23 +88,23 @@ function Get-MnbFullHistory {
         # JSON fájl mentése
         #$jsonString = $output | ConvertTo-Json -Depth 10 -Compress
         #$jsonString | Out-File -FilePath $jsonFajl -Encoding utf8
-        #Write-Host "JSON fajl letrehozva: $jsonFajl" -ForegroundColor Green
+        #Write-Host "JSON fájl létrehozva: $jsonFajl" -ForegroundColor Green
 
         # JavaScript fájl mentése const változóval
         $jsContent = "const MNB_RATES = $jsonString;"
         $jsContent | Out-File -FilePath $jsFajl -Encoding utf8
-        Write-Host "JavaScript fajl letrehozva: $jsFajl" -ForegroundColor Green
+        Write-Host "JavaScript fájl létrehozva: $jsFajl" -ForegroundColor Green
 
         # CSV fájl mentése
-        $csvHeader = "Datum;Ertek;Generalt_HETVEGE"
+        $csvHeader = "Datum,Erték,Generalt"
         $csvRows = $fullHistory | ForEach-Object {
             "$($_.d);$($_.e);$($_.g)"
         }
         $csvContent = @($csvHeader) + $csvRows
         $csvContent | Out-File -FilePath $csvFajl -Encoding utf8
-        Write-Host "CSV fajl letrehozva: $csvFajl" -ForegroundColor Green
+        Write-Host "CSV fájl létrehozva: $csvFajl" -ForegroundColor Green
 
-        Write-Host "Osszes bejegyzés szama: $($fullHistory.Count)"
+        Write-Host "Összes bejegyzés száma: $($fullHistory.Count)"
     }
     catch {
         Write-Host " HIBA: $($_.Exception.Message)" -ForegroundColor Red
