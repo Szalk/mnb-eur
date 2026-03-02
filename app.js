@@ -326,11 +326,20 @@ function processExcelData(data, headerRowIndex) {
 
         let difference = null, differencePercent = null, diffClass = '';
         if (hufAmount !== null && calculatedHuf !== null) {
-            difference        = parseFloat((hufAmount - calculatedHuf).toFixed(2));
-            // Denominator is the source hufAmount (not the derived calculatedHuf)
-            differencePercent = (hufAmount !== 0)
-                ? parseFloat((difference / hufAmount * 100).toFixed(2))
-                : 0;
+            difference = parseFloat((hufAmount - calculatedHuf).toFixed(2));
+
+            if (hufAmount !== 0) {
+                // Normal case: % relative to the source HUF amount
+                differencePercent = parseFloat((difference / hufAmount * 100).toFixed(2));
+            } else if (calculatedHuf !== 0) {
+                // Source HUF is 0: the full amount is missing.
+                // Express as % relative to what the amount should have been (calculatedHuf).
+                // e.g. hufAmount=0, calculatedHuf=100 000 → difference=-100 000 → -100%
+                differencePercent = parseFloat((difference / calculatedHuf * 100).toFixed(2));
+            } else {
+                differencePercent = 0; // both 0: no deviation
+            }
+
             diffClass = Math.abs(difference) < 0.5 ? 'difference-zero'
                        : difference > 0             ? 'difference-positive'
                        :                              'difference-negative';
