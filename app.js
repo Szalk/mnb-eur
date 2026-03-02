@@ -3,6 +3,7 @@ const CONFIG = {
     currencyFilter: 'EUR',
     columns: {
         invoiceNum:       'Számla száma',
+        invoiceOperation: 'Számla művelete',
         issueDate:        'Számla kelte',
         performanceDate:  'Teljesítés dátuma',
         currency:         'Számla pénzneme',
@@ -12,16 +13,17 @@ const CONFIG = {
         transactionType:  'Ügylettípus'
     },
     columnIndexes: {
-        invoiceNum:-1, issueDate:-1, performanceDate:-1, currency:-1,
+        invoiceNum:-1, invoiceOperation:-1, issueDate:-1, performanceDate:-1, currency:-1,
         eurAmount:-1, hufAmount:-1, eurRate:-1, transactionType:-1
     },
     searchDays: 30
 };
 
-let dataTable   = null;
+let dataTable      = null;
 let processedData  = [];
 let rawExcelData   = null;
 let selectedFile   = null;
+let filterProblemOnly = false;
 
 const uploadArea = document.getElementById('uploadArea');
 const fileInput  = document.getElementById('fileInput');
@@ -39,10 +41,10 @@ const TRANSACTION_TYPES = {
 function detectTransactionType(cellValue) {
     if (!cellValue) return TRANSACTION_TYPES.EGYEB;
     const v = cellValue.toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    if (v.includes('kozosseg') || /\bkb\b/.test(v))                                   return TRANSACTION_TYPES.KB;
-    if (v.includes('eloleg'))                                                           return TRANSACTION_TYPES.ELEG;
-    if (v.includes('fordito'))                                                          return TRANSACTION_TYPES.FORDÍTOTT;
-    if (v.includes('idoszak') || v.includes('folyamatos'))                              return TRANSACTION_TYPES.IDOSZAKOS;
+    if (v.includes('kozosseg') || /\bkb\b/.test(v))             return TRANSACTION_TYPES.KB;
+    if (v.includes('eloleg'))                                    return TRANSACTION_TYPES.ELEG;
+    if (v.includes('fordito'))                                   return TRANSACTION_TYPES.FORDÍTOTT;
+    if (v.includes('idoszak') || v.includes('folyamatos'))       return TRANSACTION_TYPES.IDOSZAKOS;
     return TRANSACTION_TYPES.EGYEB;
 }
 
@@ -70,10 +72,6 @@ function resolveTargetDate(txType, issueDateStr, perfDateStr) {
 // Phase 1: exact on resolved target date (T + T-1).
 // Phase 2: exact on secondary date (T + T-1).
 // Phase 3: ±30-day window from both anchors.
-// Legal category is determined by anchorType of the winning match:
-//   anchorType='teljesítés' + exact  →  'helyes'
-//   any other match found            →  'kérdéses'
-//   no match                         →  'nincs'
 function findBestRateMatch(invoiceRate, issueDateStr, perfDateStr, txType) {
     if (!invoiceRate) return null;
     const TOL = 0.01;
@@ -89,7 +87,6 @@ function findBestRateMatch(invoiceRate, issueDateStr, perfDateStr, txType) {
                                     : (targetDate !== effectivePerfDate ? effectivePerfDate : null);
     const secondaryAnchorType = secondaryDate === effectivePerfDate ? 'teljesítés' : 'kiállítás';
 
-    // MNB dual-rate: both T and T-1 are valid per publication mechanics
     const checkDual = (dateStr, anchorType) => {
         if (!dateStr) return null;
         const rT = getMnbRate(dateStr, RATE_TYPE.CURRENT_DAY);
@@ -139,9 +136,10 @@ function findBestRateMatch(invoiceRate, issueDateStr, perfDateStr, txType) {
 
 // ─── Strict 3-category legal classifier ──────────────────────────────────────
 // 'helyes'   → exact match on Fulfillment Date (T or T-1) only.
+//              Sub-variant: rate is correct but a calculation difference exists.
 // 'kérdéses' → match found on any other date (issue date, ±window).
 // 'nincs'    → no match whatsoever.
-function buildLegalFeedback(bestMatch) {
+function buildLegalFeedback(bestMatch, difference = null) {
     if (!bestMatch) {
         return {
             category:  'nincs',
@@ -154,7 +152,16 @@ function buildLegalFeedback(bestMatch) {
     const onFulfillment = bestMatch.matchType === 'exact' && bestMatch.anchorType === 'teljesítés';
 
     if (onFulfillment) {
-        const prevNote = bestMatch.rateVersion === 'previous' ? ' / MNB előző napi' : '';
+        const prevNote   = bestMatch.rateVersion === 'previous' ? ' / MNB előző napi' : '';
+        const hasCalcDiff = difference !== null && Math.abs(difference) >= 0.01;
+        if (hasCalcDiff) {
+            return {
+                category:  'helyes',
+                iconClass: 'bi-check-circle text-success',
+                label:     'Jogilag helyes (eltéréssel)',
+                text:      `Az árfolyam helyes (${bestMatch.targetDate}${prevNote}), de számítási eltérés van (kerekítési különbség).`
+            };
+        }
         return {
             category:  'helyes',
             iconClass: 'bi-check-circle-fill text-success',
@@ -171,26 +178,33 @@ function buildLegalFeedback(bestMatch) {
     };
 }
 
-// Forrás egyezés badge: shows the rate source (MNB napi / MNB előző napi / window / none)
+// ─── Source badge: descriptive date + nature of match ────────────────────────
+// Shows: which date was used (Teljesítés / Kiállítás) AND the nature (azonos nap / előző nap / ±Xn)
 function buildSourceBadge(bestMatch) {
     if (!bestMatch) {
         return '<span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Nincs egyezés</span>';
     }
-    let label, cls;
+
+    const dateLabel = bestMatch.anchorType === 'teljesítés' ? 'Teljesítés' : 'Kiállítás';
+    let natureLabel, cls;
+
     if (bestMatch.matchType === 'exact') {
-        label = bestMatch.rateVersion === 'previous' ? 'MNB előző napi' : 'MNB napi';
-        cls   = bestMatch.anchorType === 'teljesítés' ? 'bg-success' : 'bg-info';
+        natureLabel = bestMatch.rateVersion === 'previous' ? 'előző nap' : 'azonos nap';
+        cls         = bestMatch.anchorType === 'teljesítés' ? 'bg-success' : 'bg-info';
     } else {
-        const sign = bestMatch.dayOffset > 0 ? '+' : '';
-        label = `${sign}${bestMatch.dayOffset}n (${bestMatch.anchorType})`;
-        cls   = 'bg-warning text-dark';
+        const sign  = bestMatch.dayOffset > 0 ? '+' : '';
+        natureLabel = `${sign}${bestMatch.dayOffset}n`;
+        cls         = 'bg-warning text-dark';
     }
-    return `<span class="badge ${cls}"><i class="bi bi-currency-exchange me-1"></i>${label}</span>`;
+
+    return `<span class="badge ${cls}"><i class="bi bi-currency-exchange me-1"></i>${dateLabel} · ${natureLabel}</span>`;
 }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 function loadConfig() {
     CONFIG.columns.invoiceNum      = document.getElementById('configInvoiceNum').value;
+    const opEl = document.getElementById('configInvoiceOperation');
+    if (opEl) CONFIG.columns.invoiceOperation = opEl.value;
     CONFIG.columns.issueDate       = document.getElementById('configDate').value;
     CONFIG.columns.performanceDate = document.getElementById('configPerformanceDate').value;
     CONFIG.columns.currency        = document.getElementById('configCurrency').value;
@@ -247,7 +261,6 @@ function formatDateForDisplay(v) {
 function processExcelData(data, headerRowIndex) {
     if (!data || !data.length) return [];
 
-    // Try configured row; fall back to row 0 if critical columns not found
     let actualHeaderRow = headerRowIndex;
     CONFIG.columnIndexes = findColumnIndexes(data[headerRowIndex]);
     const critical = ['issueDate', 'eurRate'];
@@ -278,20 +291,19 @@ function processExcelData(data, headerRowIndex) {
         const excelEurRate = ci.eurRate !== -1 ? parseNumber(row[ci.eurRate], true) : null;
         if (excelEurRate === null) continue;
 
-        const invoiceNum     = ci.invoiceNum !== -1 ? (row[ci.invoiceNum] || '') : '';
-        const issueDateValue = ci.issueDate !== -1  ? row[ci.issueDate]  : null;
-        const perfDateValue  = ci.performanceDate !== -1 ? row[ci.performanceDate] : null;
-        const eurAmount      = ci.eurAmount !== -1  ? parseNumber(row[ci.eurAmount]) : null;
-        const hufAmount      = ci.hufAmount !== -1  ? parseNumber(row[ci.hufAmount]) : null;
-        const txTypeValue    = ci.transactionType !== -1 ? row[ci.transactionType] : null;
+        const invoiceNum      = ci.invoiceNum !== -1 ? (row[ci.invoiceNum] || '') : '';
+        const invoiceOperation = ci.invoiceOperation !== -1 ? (row[ci.invoiceOperation] || '') : '';
+        const issueDateValue  = ci.issueDate !== -1 ? row[ci.issueDate] : null;
+        const perfDateValue   = ci.performanceDate !== -1 ? row[ci.performanceDate] : null;
+        const eurAmount       = ci.eurAmount !== -1 ? parseNumber(row[ci.eurAmount]) : null;
+        const hufAmount       = ci.hufAmount !== -1 ? parseNumber(row[ci.hufAmount]) : null;
+        const txTypeValue     = ci.transactionType !== -1 ? row[ci.transactionType] : null;
 
         const issueDateStr = formatDate(issueDateValue);
         if (!issueDateStr || eurAmount === null) continue;
 
-        // Date collision: if issue === perf, they are the same date
         const perfDateStr = formatDate(perfDateValue) || issueDateStr;
 
-        // MNB reference rates for display columns
         const mnbPerfResult  = getMnbRate(perfDateStr, RATE_TYPE.CURRENT_DAY);
         const mnbIssueResult = issueDateStr !== perfDateStr
             ? getMnbRate(issueDateStr, RATE_TYPE.CURRENT_DAY)
@@ -302,12 +314,12 @@ function processExcelData(data, headerRowIndex) {
         const txType    = detectTransactionType(txTypeValue);
         const bestMatch = findBestRateMatch(excelEurRate, issueDateStr, perfDateStr, txType);
 
-        const legalFeedback     = buildLegalFeedback(bestMatch);
         const matchingRate      = bestMatch ? bestMatch.sourceRate  : null;
         const matchingDate      = bestMatch ? bestMatch.sourceDate  : null;
         const matchingGenerated = bestMatch ? bestMatch.generated   : false;
         const dayDifference     = bestMatch ? bestMatch.dayOffset   : null;
 
+        // Compute difference BEFORE buildLegalFeedback (needed for new calc-diff condition)
         const calculatedHuf = (eurAmount && matchingRate)
             ? parseFloat((eurAmount * matchingRate).toFixed(2))
             : null;
@@ -323,8 +335,11 @@ function processExcelData(data, headerRowIndex) {
                        :                              'difference-negative';
         }
 
+        const legalFeedback = buildLegalFeedback(bestMatch, difference);
+
         processed.push({
             invoiceNum,
+            invoiceOperation,
             issueDate: issueDateValue,
             issueDateDisplay: formatDateForDisplay(issueDateValue),
             performanceDate: perfDateValue,
@@ -399,20 +414,21 @@ function renderDashboard(data) {
 }
 
 // ─── Table rendering ──────────────────────────────────────────────────────────
-// 13-column layout (0-based index → Excel column letter):
-//  0:A Számla sorszám   1:B Forrás egyezés    2:C Kiállítás dátuma
-//  3:D Teljesítés dátu. 4:E EUR összeg         5:F Alkalmazott árfolyam
-//  6:G HUF (Excel)      7:H Legv. forrás árf.  8:I Forrás dátum
-//  9:J Számított HUF   10:K Eltérés (HUF)     11:L Eltérés (%)
-// 12:M Jogi értékelés
-const NUM_COLS_IDX  = [4, 5, 6, 7, 9, 10, 11]; // numeric column indexes (0-based)
-const NUM_COLS_XLSX = ['E','F','G','H','J','K','L']; // matching Excel column letters
+// 14-column layout (0-based index → Excel column letter):
+//  0:A Számla sorszám    1:B Számla művelete   2:C Forrás egyezés
+//  3:D Kiállítás dátuma  4:E Teljesítés dátuma 5:F EUR összeg
+//  6:G Alkalmazott árf.  7:H HUF (Excel)        8:I Legv. forrás árf.
+//  9:J Forrás dátum     10:K Számított HUF      11:L Eltérés (HUF)
+// 12:M Eltérés (%)      13:N Jogi értékelés
+const NUM_COLS_IDX  = [5, 6, 7, 8, 10, 11, 12]; // numeric column indexes (0-based)
+const NUM_COLS_XLSX = ['F','G','H','I','K','L','M']; // matching Excel column letters
 
 function renderTable(data) {
     tableBody.innerHTML = '';
+    filterProblemOnly = false; // reset filter on each new dataset
 
     if (!data.length) {
-        tableBody.innerHTML = '<tr><td colspan="13" class="text-center">Nincs megjeleníthető adat</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="14" class="text-center">Nincs megjeleníthető adat</td></tr>';
         return;
     }
 
@@ -426,10 +442,17 @@ function renderTable(data) {
 
     data.forEach(row => {
         const tr = document.createElement('tr');
-        if (row.diffClass) tr.className = row.diffClass;
-        if (row.matchingGenerated) tr.classList.add('generated-rate');
-
         const lf = row.legalFeedback;
+
+        // Non-helyes rows get a light-red highlight; helyes rows keep the diff-class coloring
+        if (lf.category !== 'helyes') {
+            tr.classList.add('legal-issue-row');
+        } else if (row.diffClass) {
+            tr.className = row.diffClass;
+        }
+        if (row.matchingGenerated) tr.classList.add('generated-rate');
+        tr.setAttribute('data-legal-category', lf.category);
+
         if (lf.category === 'helyes')   cntHelyes++;
         if (lf.category === 'kérdéses') cntKerdezes++;
         if (lf.category === 'nincs')    cntNincs++;
@@ -439,7 +462,7 @@ function renderTable(data) {
             if (row.difference < -1) negativeDiff++;
         }
 
-        // Forrás dátum: date + signed offset annotation
+        // Forrás dátum: YYYY-MM-DD + signed offset annotation
         let srcDateHtml = '-';
         if (row.matchingDate) {
             const offsetHtml = (row.dayDifference !== null && row.dayDifference !== 0)
@@ -453,8 +476,7 @@ function renderTable(data) {
             ? `<strong>${fmt(row.matchingRate, 2)}</strong>${row.matchingGenerated ? '<sup class="text-danger ms-1" title="Hétvégi generált árfolyam">*</sup>' : ''}`
             : '<span class="text-danger">—</span>';
 
-        // Highlight invoice rate when it deviates from the matched source rate
-        const rateDeviation = (row.matchingRate && row.excelEurRate) ? Math.abs(row.excelEurRate - row.matchingRate) : null;
+        const rateDeviation    = (row.matchingRate && row.excelEurRate) ? Math.abs(row.excelEurRate - row.matchingRate) : null;
         const invoiceRateClass = (rateDeviation !== null && rateDeviation >= 0.01) ? 'text-danger fw-bold' : '';
 
         const legalHtml = `<i class="bi ${lf.iconClass} me-1"></i><span class="legal-feedback">${lf.text}</span>`;
@@ -462,6 +484,7 @@ function renderTable(data) {
         // Raw numeric values stored in data-n for reliable export parsing
         tr.innerHTML = `
             <td>${row.invoiceNum || '-'}</td>
+            <td>${row.invoiceOperation || '-'}</td>
             <td class="text-center">${buildSourceBadge(row.bestMatch)}</td>
             <td>${row.issueDateDisplay}</td>
             <td>${row.performanceDateDisplay}</td>
@@ -501,6 +524,16 @@ function renderTable(data) {
         language: { url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/hu.json' },
         dom: 'Bfrtip',
         buttons: [
+            // Toggle filter: show only non-helyes rows
+            {
+                text: '<i class="bi bi-funnel-fill me-1"></i>Csak problémás sorok',
+                className: 'btn btn-outline-danger',
+                action: function(e, dt, node) {
+                    filterProblemOnly = !filterProblemOnly;
+                    $(node).toggleClass('btn-outline-danger btn-danger active');
+                    dt.draw();
+                }
+            },
             {
                 extend: 'csv',
                 text: 'CSV letöltés',
@@ -508,7 +541,6 @@ function renderTable(data) {
                 bom: true,
                 exportOptions: {
                     columns: ':visible',
-                    // Use raw data-n attribute for numeric cells → proper decimal point
                     format: { body: exportBodyFormatter }
                 }
             },
@@ -520,15 +552,37 @@ function renderTable(data) {
                 exportOptions: {
                     columns: ':visible',
                     format: { body: exportBodyFormatter }
+                },
+                // Post-process XLSX: convert raw numeric cells in financial columns to
+                // inline strings with comma decimal (e.g. 398.93 → "398,93").
+                // This is necessary because DataTables Buttons strips commas when
+                // normalizing string values before writing XLSX numeric cells.
+                customize: function(xlsx) {
+                    const sheet = xlsx.xl.worksheets['sheet1.xml'];
+                    $('row', sheet).each(function() {
+                        const r = parseInt($(this).attr('r'));
+                        if (r <= 1) return; // skip header row
+                        NUM_COLS_XLSX.forEach(col => {
+                            const cell = $('c[r="' + col + r + '"]', this);
+                            if (!cell.length) return;
+                            const numVal = parseFloat(cell.find('v').text());
+                            if (!isNaN(numVal)) {
+                                // Replace numeric cell with inline string "398,93"
+                                const strVal = numVal.toFixed(2).replace('.', ',');
+                                cell.attr('t', 'inlineStr');
+                                cell.html('<is><t>' + strVal + '</t></is>');
+                            }
+                        });
+                    });
                 }
             }
         ],
         pageLength: 25,
-        order: [[10, 'desc']], // Eltérés (HUF) descending
+        order: [[11, 'desc']], // Eltérés (HUF) descending
         columnDefs: [
-            { type: 'num',     targets: NUM_COLS_IDX.filter(i => i !== 11) },
-            { type: 'num-fmt', targets: [11] },
-            { type: 'string',  targets: [0, 1, 2, 3, 8, 12] }
+            { type: 'num',     targets: NUM_COLS_IDX.filter(i => i !== 12) },
+            { type: 'num-fmt', targets: [12] },
+            { type: 'string',  targets: [0, 1, 2, 3, 4, 9, 13] }
         ],
         destroy:   true,
         retrieve:  true,
@@ -537,9 +591,10 @@ function renderTable(data) {
     });
 }
 
-// Export body formatter: returns comma-decimal strings (e.g. "360,90") for numeric columns
-// so Excel preserves 2 decimal places and the Hungarian comma separator.
-// Prefers data-n attribute (set in renderTable) over display HTML.
+// Export body formatter: returns raw JS numbers for numeric columns so the
+// customize callback can convert them to comma-decimal inline strings in XLSX.
+// For CSV, the same raw number is written (dot decimal), which is standard.
+// Non-numeric columns are returned as plain text (HTML stripped).
 function exportBodyFormatter(data, row, column, node) {
     if (NUM_COLS_IDX.includes(column)) {
         // Prefer the raw JS float stored in data-n
@@ -551,11 +606,8 @@ function exportBodyFormatter(data, row, column, node) {
             if (!text || text === '-' || text === '—') return '';
             n = parseFloat(text.replace(/\s/g, '').replace(/\./g, '').replace(',', '.').replace('%', ''));
         }
-        if (isNaN(n)) return '';
-        // Return as string with comma decimal so Excel cells show e.g. "360,90"
-        return n.toFixed(2).replace('.', ',');
+        return isNaN(n) ? '' : n; // raw JS number
     }
-    // Strip HTML for non-numeric columns
     return String(data).replace(/<[^>]+>/g, '').trim();
 }
 
@@ -615,13 +667,22 @@ function processExcel(file) {
 }
 
 // MNB info (elements may not exist if panel was removed – guard with ?.)
-const availEl = document.getElementById('availableRatesCount');
+const availEl  = document.getElementById('availableRatesCount');
 const updateEl = document.getElementById('updateMNB');
-if (availEl) availEl.textContent = MNB_RATES.data.length;
+if (availEl)  availEl.textContent = MNB_RATES.data.length;
 if (updateEl) {
     const ts = MNB_RATES.ts;
     updateEl.textContent = `${ts.slice(0,4)}.${ts.slice(4,6)}.${ts.slice(6,8)}. ${ts.slice(8,10)}:${ts.slice(10,12)}`;
 }
 
 loadConfig();
+
+// Register once: custom search filter toggled by the "Csak problémás sorok" button.
+// Uses data-legal-category attribute set on each <tr> in renderTable.
+$.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
+    if (!filterProblemOnly || !dataTable) return true;
+    const rowNode = dataTable.row(dataIndex).node();
+    return rowNode ? rowNode.getAttribute('data-legal-category') !== 'helyes' : true;
+});
+
 console.log('App inicializálva');

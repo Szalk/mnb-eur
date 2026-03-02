@@ -55,12 +55,12 @@
             margin-top: 30px;
             overflow-x: auto;
         }
-      .generated-rate td:nth-child(6) {
+      .generated-rate td:nth-child(7) {
     position: relative;
     font-style: italic;
 }
 
-.generated-rate td:nth-child(6)::after {
+.generated-rate td:nth-child(7)::after {
     content: " *";
     color: #dc3545;
     font-weight: bold;
@@ -135,12 +135,12 @@
 }
 
 /* Generált árfolyam jelölés */
-.generated-rate td:nth-child(6) {
+.generated-rate td:nth-child(7) {
     position: relative;
     font-style: italic;
 }
 
-.generated-rate td:nth-child(6)::after {
+.generated-rate td:nth-child(7)::after {
     content: "";
 }
 
@@ -228,6 +228,11 @@ sup.text-danger { font-size: 0.65em; cursor: help; }
     max-width: 320px;
 }
 td:has(.legal-feedback) { white-space: normal !important; min-width: 180px; }
+
+/* ── Non-helyes row highlight (light red) ────────── */
+/* Applied to kérdéses and nincs rows; overrides diff-class coloring */
+tr.legal-issue-row { background-color: #fff0f0 !important; }
+tr.legal-issue-row td { color: #5c1010; }
     </style>
 </head>
 <body>
@@ -260,6 +265,11 @@ td:has(.legal-feedback) { white-space: normal !important; min-width: 180px; }
                     <div class="col-md-3">
                         <label class="form-label">Számla sorszám oszlop</label>
                         <input type="text" class="form-control" id="configInvoiceNum" value="Számla száma">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Számla művelete oszlop <small class="text-muted">(opcionális)</small></label>
+                        <input type="text" class="form-control" id="configInvoiceOperation" value="Számla művelete"
+                               placeholder="pl. Számla művelete">
                     </div>
                     <div class="col-md-3">
                         <label class="form-label">Kiállítás dátuma oszlop</label>
@@ -365,14 +375,15 @@ td:has(.legal-feedback) { white-space: normal !important; min-width: 180px; }
                 <thead>
                     <tr>
                         <th>Számla sorszám</th>
-                        <th title="MNB napi / MNB előző napi / ablak egyezés">Forrás egyezés</th>
+                        <th title="A számla típusa / művelete a forrásból">Számla művelete</th>
+                        <th title="Az egyezés alapjául szolgáló dátum és jelleg">Forrás egyezés</th>
                         <th>Kiállítás dátuma</th>
                         <th>Teljesítés dátuma</th>
                         <th title="Devizás (EUR) nettó összeg a számlán">Számla nettó összege a számla pénznemében</th>
                         <th title="A számlán alkalmazott árfolyam">Alkalmazott árfolyam</th>
                         <th title="Forint nettó összeg a számlán">Számla számított nettó összege forintban</th>
                         <th title="A legjobb egyező MNB-árfolyam">Legv. forrás árfolyam</th>
-                        <th title="Az egyező MNB-árfolyam közzétételének dátuma">Forrás dátum</th>
+                        <th title="Az egyező MNB-árfolyam közzétételének dátuma (YYYY-MM-DD)">Forrás dátum</th>
                         <th title="Devizás összeg × Legv. forrás árfolyam">Számított HUF</th>
                         <th title="Számla HUF − Számított HUF">Eltérés (HUF)</th>
                         <th>Eltérés (%)</th>
