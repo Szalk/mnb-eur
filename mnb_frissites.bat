@@ -1,5 +1,8 @@
 @echo off
 pushd "%~dp0"
-powershell -NoProfile -ExecutionPolicy Bypass -File "src/mnb.ps1"
 
+:: PowerShell indítása, az útvonalat idézőjelek közé tesszük a biztonság kedvéért
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0src\mnb.ps1"
+
+popd
 pause
