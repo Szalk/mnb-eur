@@ -8,9 +8,9 @@ const CONFIG = {
         performanceDate:  'Teljesítés dátuma',
         currency:         'Számla pénzneme',
         eurAmount:        'Számla nettó összege a számla pénznemében',
-        hufAmount:        'Számla nettó összege forintban',
+        hufAmount:        'Számla számított nettó összege forintban',
         eurRate:          'Alkalmazott árfolyam',
-        transactionType:  'Ügylettípus'
+        transactionType:  'Vevő adószáma'
     },
     columnIndexes: {
         invoiceNum:-1, invoiceOperation:-1, issueDate:-1, performanceDate:-1, currency:-1,
@@ -19,15 +19,17 @@ const CONFIG = {
     searchDays: 30
 };
 
-let dataTable      = null;
-let processedData  = [];
-let rawExcelData   = null;
-let selectedFile   = null;
+let dataTable         = null;
+let processedData     = [];
+let rawExcelData      = null;
+let selectedFile      = null;
 let filterProblemOnly = false;
 
-const uploadArea = document.getElementById('uploadArea');
-const fileInput  = document.getElementById('fileInput');
-const tableBody  = document.getElementById('tableBody');
+const uploadArea         = document.getElementById('uploadArea');
+const fileInput          = document.getElementById('fileInput');
+const tableBody          = document.getElementById('tableBody');
+const fileReadyBar       = document.getElementById('fileReadyBar');
+const selectedFileNameEl = document.getElementById('selectedFileName');
 
 // ─── Transaction type constants ───────────────────────────────────────────────
 const TRANSACTION_TYPES = {
@@ -69,9 +71,6 @@ function resolveTargetDate(txType, issueDateStr, perfDateStr) {
 }
 
 // ─── Core matching (dual-rate + tx-type routing) ──────────────────────────────
-// Phase 1: exact on resolved target date (T + T-1).
-// Phase 2: exact on secondary date (T + T-1).
-// Phase 3: ±30-day window from both anchors.
 function findBestRateMatch(invoiceRate, issueDateStr, perfDateStr, txType) {
     if (!invoiceRate) return null;
     const TOL = 0.01;
@@ -135,69 +134,108 @@ function findBestRateMatch(invoiceRate, issueDateStr, perfDateStr, txType) {
 }
 
 // ─── Strict 3-category legal classifier ──────────────────────────────────────
-// 'helyes'   → exact match on Fulfillment Date (T or T-1) only.
-//              Sub-variant: rate is correct but a calculation difference exists.
-// 'kérdéses' → match found on any other date (issue date, ±window).
-// 'nincs'    → no match whatsoever.
 function buildLegalFeedback(bestMatch, difference = null) {
     if (!bestMatch) {
         return {
-            category:  'nincs',
+            category: 'nincs',
             iconClass: 'bi-x-circle-fill text-danger',
-            label:     'Nincs egyezés',
-            text:      'Az alkalmazott árfolyam valószínűleg nem felel meg a jogszabályi előírásoknak.'
+            label: 'Nincs egyezés',
+            text: 'Az alkalmazott árfolyam valószínűleg nem felel meg a jogszabályi előírásoknak.'
         };
     }
 
     const onFulfillment = bestMatch.matchType === 'exact' && bestMatch.anchorType === 'teljesítés';
+    const diffValue = difference !== null ? Math.abs(difference) : 0;
+    const hasCalcDiff = diffValue >= 0.01;
+
+    // Eltérés súlyosságának meghatározása
+    let severityText = '';
+    if (hasCalcDiff) {
+        if (diffValue >= 1 && diffValue <= 999) severityText = ' (nem jelentős eltérés)';
+        else if (diffValue >= 1000 && diffValue <= 5000) severityText = ' (jelentős eltérés)';
+        else if (diffValue > 5000) severityText = ' (nagy eltérés)';
+    }
 
     if (onFulfillment) {
-        const prevNote   = bestMatch.rateVersion === 'previous' ? ' / MNB előző napi' : '';
-        const hasCalcDiff = difference !== null && Math.abs(difference) >= 0.01;
+        const prevNote = bestMatch.rateVersion === 'previous' ? ' / MNB előző napi' : '';
+        
         if (hasCalcDiff) {
             return {
-                category:  'helyes',
-                iconClass: 'bi-check-circle text-success',
-                label:     'Jogilag helyes (eltéréssel)',
-                text:      `Az árfolyam helyes (${bestMatch.targetDate}${prevNote}), de számítási eltérés van (kerekítési különbség).`
+                // Ha van eltérés, a kategória 'discrepancy' lesz, hogy a UI tudja pirosítani a hátteret
+                category: 'discrepancy', 
+                iconClass: 'bi-exclamation-circle text-warning',
+                label: 'Jogilag helyes (eltéréssel)',
+                text: `Az árfolyam helyes (${bestMatch.targetDate}${prevNote}), de számítási eltérés van${severityText}.`
             };
         }
+        
         return {
-            category:  'helyes',
+            category: 'helyes',
             iconClass: 'bi-check-circle-fill text-success',
-            label:     'Jogilag helyes',
-            text:      `Az alkalmazott árfolyam helyes. Alapja: ${bestMatch.ruleName} szerinti dátum (${bestMatch.targetDate}${prevNote}).`
+            label: 'Az alkalmazott árfolyam helyes',
+            text: `Az alkalmazott árfolyam helyes. Alapja: ${bestMatch.ruleName} szerinti dátum (${bestMatch.targetDate}${prevNote}).`
         };
     }
 
+    // Ha megtaláltuk az árfolyamot (pl. kiállítás dátumánál), de nem teljesítés napján
     return {
-        category:  'kérdéses',
+        category: 'kérdéses',
         iconClass: 'bi-exclamation-triangle-fill text-warning',
-        label:     'Jogilag kérdéses',
-        text:      'Az alkalmazott árfolyam valószínűleg nem felel meg a jogszabályi előírásoknak.'
+        label: 'Jogilag kérdéses',
+        text: `Az alkalmazott árfolyam valószínűleg nem felel meg a jogszabályi előírásoknak${severityText}.`
     };
 }
 
-// ─── Source badge: descriptive date + nature of match ────────────────────────
-// Shows: which date was used (Teljesítés / Kiállítás) AND the nature (azonos nap / előző nap / ±Xn)
+// ─── Source badge ─────────────────────────────────────────────────────────────
 function buildSourceBadge(bestMatch) {
     if (!bestMatch) {
-        return '<span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Nincs egyezés</span>';
+        return '<span class="badge bg-danger" title="Nincs releváns árfolyamadat"><i class="bi bi-x-circle me-1"></i>Nincs találat</span>';
     }
 
-    const dateLabel = bestMatch.anchorType === 'teljesítés' ? 'Teljesítés' : 'Kiállítás';
-    let natureLabel, cls;
+    // --- Dátum és Napnév előkészítése ---
+    const anchorDateDay = dayjs(bestMatch.anchorDate).locale('hu').format('dddd');
+    const tooltip = `${bestMatch.anchorType}: ${anchorDateDay}`;
 
-    if (bestMatch.matchType === 'exact') {
-        natureLabel = bestMatch.rateVersion === 'previous' ? 'előző nap' : 'azonos nap';
-        cls         = bestMatch.anchorType === 'teljesítés' ? 'bg-success' : 'bg-info';
+    const isTeljesites = bestMatch.anchorType === 'teljesítés';
+    const offset = Math.abs(bestMatch.dayOffset); // Eltérés napokban
+    
+    let cls = '';
+    let natureLabel = '';
+    const dateLabel = isTeljesites ? 'Teljesítés' : 'Kiállítás';
+
+    if (isTeljesites) {
+        // --- TELJESÍTÉS DÁTUMA (Zöld árnyalatok és Sárga) ---
+        if (bestMatch.matchType === 'exact') {
+            if (bestMatch.rateVersion === 'current') {
+                cls = 'badge-success-darker'; // Azonos nap
+                natureLabel = 'azonos nap';
+            } else {
+                cls = 'badge-success-medium'; // Előző nap
+                natureLabel = 'előző nap';
+            }
+        } else if (offset === 2) {
+            cls = 'badge-success-light'; // T-2 nap
+            natureLabel = 'T-2 nap';
+        } else {
+            cls = 'bg-warning text-dark'; // > 2 nap
+            const sign = bestMatch.dayOffset > 0 ? '+' : '';
+            natureLabel = `${sign}${bestMatch.dayOffset} nap`;
+        }
     } else {
-        const sign  = bestMatch.dayOffset > 0 ? '+' : '';
-        natureLabel = `${sign}${bestMatch.dayOffset}n`;
-        cls         = 'bg-warning text-dark';
+        // --- KIÁLLÍTÁS DÁTUMA (Kék árnyalatok) ---
+        if (bestMatch.matchType === 'exact') {
+            cls = 'badge-info-dark';
+            natureLabel = 'azonos nap';
+        } else {
+            cls = 'badge-info-light text-dark';
+            const sign = bestMatch.dayOffset > 0 ? '+' : '';
+            natureLabel = `${sign}${bestMatch.dayOffset} nap`;
+        }
     }
 
-    return `<span class="badge ${cls}"><i class="bi bi-currency-exchange me-1"></i>${dateLabel} · ${natureLabel}</span>`;
+    return `<span class="badge ${cls}" title="${tooltip}">
+                <i class="bi bi-currency-exchange me-1"></i>${dateLabel} · ${natureLabel}
+            </span>`;
 }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -227,14 +265,10 @@ function findColumnIndexes(headerRow) {
     return indexes;
 }
 
-// Decimal fix: corrupted exports may omit the decimal point (e.g. "39176" → 391.76).
-// Any EUR/HUF rate > 1000 is unrealistic, so divide by 100.
-// isRate=true applies this fix; for amounts (which can exceed 1000) do NOT apply it.
 function parseNumber(value, isRate = false) {
     if (value === null || value === undefined || value === '') return null;
     if (typeof value === 'number') return (isRate && value > 1000) ? value / 100 : value;
     if (typeof value === 'string') {
-        // Normalize: accept both '.' and ',' as decimal separators; strip thousands separators
         const cleaned = value.replace(/[^\d.,\-]/g, '').replace(',', '.').replace(/\.(?=.*\.)/g, '');
         const n = parseFloat(cleaned);
         if (isNaN(n)) return null;
@@ -246,18 +280,14 @@ function parseNumber(value, isRate = false) {
 function formatDateForDisplay(v) {
     if (!v) return '-';
     if (typeof v === 'number') {
-        // Excel serial date → JS Date → YYYY-MM-DD
         const d = new Date(Math.round((v - 25569) * 86400000));
         return d.toISOString().split('T')[0];
     }
-    // Already a string: normalize to YYYY-MM-DD via formatDate helper (defined in index.html)
     const normalized = formatDate(v);
     return normalized || v.toString();
 }
 
 // ─── Data processing ──────────────────────────────────────────────────────────
-// Header fallback: if the configured header row has no recognized columns,
-// automatically retries with row 0 before giving up.
 function processExcelData(data, headerRowIndex) {
     if (!data || !data.length) return [];
 
@@ -287,17 +317,16 @@ function processExcelData(data, headerRowIndex) {
             if (!cur || cur.toString().trim().toUpperCase() !== 'EUR') continue;
         }
 
-        // isRate=true: apply >1000÷100 fix only to the rate column (not to amounts)
         const excelEurRate = ci.eurRate !== -1 ? parseNumber(row[ci.eurRate], true) : null;
         if (excelEurRate === null) continue;
 
-        const invoiceNum      = ci.invoiceNum !== -1 ? (row[ci.invoiceNum] || '') : '';
+        const invoiceNum       = ci.invoiceNum !== -1 ? (row[ci.invoiceNum] || '') : '';
         const invoiceOperation = ci.invoiceOperation !== -1 ? (row[ci.invoiceOperation] || '') : '';
-        const issueDateValue  = ci.issueDate !== -1 ? row[ci.issueDate] : null;
-        const perfDateValue   = ci.performanceDate !== -1 ? row[ci.performanceDate] : null;
-        const eurAmount       = ci.eurAmount !== -1 ? parseNumber(row[ci.eurAmount]) : null;
-        const hufAmount       = ci.hufAmount !== -1 ? parseNumber(row[ci.hufAmount]) : null;
-        const txTypeValue     = ci.transactionType !== -1 ? row[ci.transactionType] : null;
+        const issueDateValue   = ci.issueDate !== -1 ? row[ci.issueDate] : null;
+        const perfDateValue    = ci.performanceDate !== -1 ? row[ci.performanceDate] : null;
+        const eurAmount        = ci.eurAmount !== -1 ? parseNumber(row[ci.eurAmount]) : null;
+        const hufAmount        = ci.hufAmount !== -1 ? parseNumber(row[ci.hufAmount]) : null;
+        const txTypeValue      = ci.transactionType !== -1 ? row[ci.transactionType] : null;
 
         const issueDateStr = formatDate(issueDateValue);
         if (!issueDateStr || eurAmount === null) continue;
@@ -319,7 +348,6 @@ function processExcelData(data, headerRowIndex) {
         const matchingGenerated = bestMatch ? bestMatch.generated   : false;
         const dayDifference     = bestMatch ? bestMatch.dayOffset   : null;
 
-        // Compute difference BEFORE buildLegalFeedback (needed for new calc-diff condition)
         const calculatedHuf = (eurAmount && matchingRate)
             ? parseFloat((eurAmount * matchingRate).toFixed(2))
             : null;
@@ -327,19 +355,13 @@ function processExcelData(data, headerRowIndex) {
         let difference = null, differencePercent = null, diffClass = '';
         if (hufAmount !== null && calculatedHuf !== null) {
             difference = parseFloat((hufAmount - calculatedHuf).toFixed(2));
-
             if (hufAmount !== 0) {
-                // Normal case: % relative to the source HUF amount
                 differencePercent = parseFloat((difference / hufAmount * 100).toFixed(2));
             } else if (calculatedHuf !== 0) {
-                // Source HUF is 0: the full amount is missing.
-                // Express as % relative to what the amount should have been (calculatedHuf).
-                // e.g. hufAmount=0, calculatedHuf=100 000 → difference=-100 000 → -100%
                 differencePercent = parseFloat((difference / calculatedHuf * 100).toFixed(2));
             } else {
-                differencePercent = 0; // both 0: no deviation
+                differencePercent = 0;
             }
-
             diffClass = Math.abs(difference) < 0.5 ? 'difference-zero'
                        : difference > 0             ? 'difference-positive'
                        :                              'difference-negative';
@@ -348,8 +370,7 @@ function processExcelData(data, headerRowIndex) {
         const legalFeedback = buildLegalFeedback(bestMatch, difference);
 
         processed.push({
-            invoiceNum,
-            invoiceOperation,
+            invoiceNum, invoiceOperation,
             issueDate: issueDateValue,
             issueDateDisplay: formatDateForDisplay(issueDateValue),
             performanceDate: perfDateValue,
@@ -365,6 +386,17 @@ function processExcelData(data, headerRowIndex) {
     return processed;
 }
 
+// ─── Loading overlay ──────────────────────────────────────────────────────────
+function showLoading() {
+    const ol = document.getElementById('loadingOverlay');
+    if (ol) ol.classList.add('show');
+}
+
+function hideLoading() {
+    const ol = document.getElementById('loadingOverlay');
+    if (ol) ol.classList.remove('show');
+}
+
 // ─── Audit Dashboard ──────────────────────────────────────────────────────────
 function renderDashboard(data) {
     const el = document.getElementById('auditDashboard');
@@ -378,71 +410,71 @@ function renderDashboard(data) {
     const overchg  = data.filter(r => r.difference !== null && r.difference >  1).length;
     const underchg = data.filter(r => r.difference !== null && r.difference < -1).length;
 
-    const statCard = (val, label, bg, textClass = '') => `
-        <div class="col">
-            <div class="text-center p-3 rounded-3 h-100 d-flex flex-column justify-content-center" style="background:${bg}">
-                <div class="fs-2 fw-bold ${textClass}">${val}</div>
-                <div class="small mt-1 text-dark fw-medium">${label}</div>
+    const helyesPct = total > 0 ? Math.round(helyes / total * 100) : 0;
+    const nincsPct  = total > 0 ? Math.round(nincs  / total * 100) : 0;
+
+    const kpiCard = (icon, iconCls, val, label, detail = '') => `
+        <div class="kpi-card">
+            <div class="kpi-icon ${iconCls}"><i class="bi ${icon}"></i></div>
+            <div class="kpi-body">
+                <div class="kpi-label">${label}</div>
+                <div class="kpi-value">${val}</div>
+                ${detail ? `<div class="kpi-detail">${detail}</div>` : ''}
             </div>
         </div>`;
 
-    const discAlert = (overchg + underchg) > 0
-        ? `<div class="alert alert-warning mb-0 mt-3 py-2 px-3 d-flex align-items-center gap-3">
-               <i class="bi bi-exclamation-triangle-fill fs-5 text-warning"></i>
-               <span><strong>${overchg + underchg} számlán HUF-eltérés:</strong>
-               <span class="ms-3 text-danger fw-bold">▲ ${overchg} túlszámlázott</span>
-               <span class="ms-3 text-success fw-bold">▼ ${underchg} alulszámlázott</span></span>
+    const discHtml = (overchg + underchg) > 0
+        ? `<div class="disc-alert disc-alert--warning">
+               <i class="bi bi-exclamation-triangle-fill flex-shrink-0"></i>
+               <span>
+                   <strong>${overchg + underchg} számlán HUF-eltérés:</strong>
+                   <span class="ms-3 text-danger fw-bold">▲ ${overchg} túlszámlázott</span>
+                   <span class="ms-3 text-success fw-bold">▼ ${underchg} alulszámlázott</span>
+               </span>
            </div>`
-        : `<div class="alert alert-success mb-0 mt-3 py-2 px-3">
-               <i class="bi bi-check-circle-fill me-2"></i>Nem található HUF-eltérés az árfolyamokon.
+        : `<div class="disc-alert disc-alert--success">
+               <i class="bi bi-check-circle-fill flex-shrink-0"></i>
+               <span>Nem található számottevő HUF-eltérés az árfolyamokon.</span>
            </div>`;
 
     el.style.display = '';
     el.innerHTML = `
-        <div class="col-12">
-            <div class="card shadow-sm border-0">
-                <div class="card-body">
-                    <h5 class="card-title mb-3">
-                        <i class="fas fa-search-dollar me-2 text-primary"></i>Ellenőrzési összefoglaló
-                    </h5>
-                    <div class="row g-3">
-                        ${statCard(total,    'Összes EUR számla',                     '#e9ecef')}
-                        ${statCard(helyes,   'Jogilag helyes<br>(teljesítés T/T−1)',  '#d1e7dd', 'text-success')}
-                        ${statCard(kerdezes, 'Jogilag kérdéses<br>(egyéb dátum)',     '#fff3cd', 'text-warning')}
-                        ${statCard(nincs,    'Nincs egyezés',                        '#f8d7da', 'text-danger')}
-                        ${statCard(prevDay,  'MNB előző napi<br>egyezés (T−1)',       '#cff4fc', 'text-info')}
-                    </div>
-                    ${discAlert}
-                    <div class="mt-2 small text-muted">
-                        <i class="bi bi-info-circle me-1"></i>
-                        <strong>Jogilag helyes</strong> = árfolyam egyezik a teljesítés napján érvényes MNB-árfolyammal (T vagy T−1).
-                        Bármely más dátumra eső egyezés <strong>kérdéses</strong> és kézi felülvizsgálatot igényel.
-                    </div>
-                </div>
-            </div>
+        <div class="kpi-grid">
+            ${kpiCard('bi-receipt',                  'kpi-icon--neutral', total,    'Összes EUR számla')}
+            ${kpiCard('bi-check-circle-fill',        'kpi-icon--success', helyes,   'Jogilag helyes',    `${helyesPct}% · T és T−1 egyezés`)}
+            ${kpiCard('bi-exclamation-triangle-fill','kpi-icon--warning', kerdezes, 'Jogilag kérdéses',  'egyéb dátumegyezés')}
+            ${kpiCard('bi-x-circle-fill',            'kpi-icon--danger',  nincs,    'Nincs egyezés',     `${nincsPct}%`)}
+            ${kpiCard('bi-clock-history',            'kpi-icon--info',    prevDay,  'MNB előző napi (T−1)', 'T−1 egyezés')}
+        </div>
+        ${discHtml}
+        <div class="legal-note">
+            <i class="bi bi-info-circle flex-shrink-0"></i>
+            <span>
+                <strong>Jogilag helyes</strong> = az árfolyam egyezik a teljesítés napján érvényes
+                MNB-árfolyammal (T vagy T−1). Bármely más dátumra eső egyezés
+                <strong>kérdéses</strong> és kézi felülvizsgálatot igényel.
+            </span>
         </div>`;
 }
 
 // ─── Table rendering ──────────────────────────────────────────────────────────
-// 15-column layout (0-based index → Excel column letter):
-//  0:A Számla sorszám    1:B Számla művelete   2:C Ügylettípus
-//  3:D Forrás egyezés    4:E Kiállítás dátuma  5:F Teljesítés dátuma
-//  6:G EUR összeg        7:H Alkalmazott árf.  8:I HUF (Excel)
-//  9:J Legv. forrás árf. 10:K Forrás dátum    11:L Számított HUF
-// 12:M Eltérés (HUF)    13:N Eltérés (%)      14:O Jogi értékelés
-const NUM_COLS_IDX  = [6, 7, 8, 9, 11, 12, 13]; // numeric column indexes (0-based)
-const NUM_COLS_XLSX = ['G','H','I','J','L','M','N']; // matching Excel column letters
+const NUM_COLS_IDX  = [6, 7, 8, 9, 11, 12, 13];
+const NUM_COLS_XLSX = ['G','H','I','J','L','M','N'];
 
 function renderTable(data) {
     tableBody.innerHTML = '';
-    filterProblemOnly = false; // reset filter on each new dataset
+    filterProblemOnly = false;
 
     if (!data.length) {
-        tableBody.innerHTML = '<tr><td colspan="15" class="text-center">Nincs megjeleníthető adat</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="15" class="text-center py-4 text-muted">Nincs megjeleníthető adat</td></tr>';
         return;
     }
 
     renderDashboard(data);
+
+    // Show table section
+    const tableSection = document.getElementById('tableSection');
+    if (tableSection) tableSection.style.display = '';
 
     let positiveDiff = 0, negativeDiff = 0;
     let cntHelyes = 0, cntKerdezes = 0, cntNincs = 0;
@@ -454,7 +486,6 @@ function renderTable(data) {
         const tr = document.createElement('tr');
         const lf = row.legalFeedback;
 
-        // Non-helyes rows get a light-red highlight; helyes rows keep the diff-class coloring
         if (lf.category !== 'helyes') {
             tr.classList.add('legal-issue-row');
         } else if (row.diffClass) {
@@ -472,7 +503,6 @@ function renderTable(data) {
             if (row.difference < -1) negativeDiff++;
         }
 
-        // Forrás dátum: YYYY-MM-DD + signed offset annotation
         let srcDateHtml = '-';
         if (row.matchingDate) {
             const offsetHtml = (row.dayDifference !== null && row.dayDifference !== 0)
@@ -481,7 +511,6 @@ function renderTable(data) {
             srcDateHtml = row.matchingDate + offsetHtml;
         }
 
-        // Legv. forrás árfolyam cell
         const matchRateHtml = row.matchingRate
             ? `<strong>${fmt(row.matchingRate, 2)}</strong>${row.matchingGenerated ? '<sup class="text-danger ms-1" title="Hétvégi generált árfolyam">*</sup>' : ''}`
             : '<span class="text-danger">—</span>';
@@ -491,11 +520,8 @@ function renderTable(data) {
 
         const legalHtml = `<i class="bi ${lf.iconClass} me-1"></i><span class="legal-feedback">${lf.text}</span>`;
 
-        // Raw numeric values stored in data-n for reliable export parsing
         tr.innerHTML = `
             <td>${row.invoiceNum || '-'}</td>
-            <td>${row.invoiceOperation || '-'}</td>
-            <td>${row.txTypeValue || '-'}</td>
             <td class="text-center">${buildSourceBadge(row.bestMatch)}</td>
             <td>${row.issueDateDisplay}</td>
             <td>${row.performanceDateDisplay}</td>
@@ -507,24 +533,44 @@ function renderTable(data) {
             <td class="text-end" data-n="${row.calculatedHuf ?? ''}">${fmt(row.calculatedHuf, 2)}</td>
             <td class="text-end fw-semibold" data-n="${row.difference ?? ''}">${fmt(row.difference, 2)}</td>
             <td class="text-end" data-n="${row.differencePercent ?? ''}">${fmtPct(row.differencePercent)}</td>
+			<td>${row.invoiceOperation || '-'}</td>
+            <td>${row.txTypeValue || '-'}</td>
             <td class="small">${legalHtml}</td>`;
 
         tableBody.appendChild(tr);
     });
 
-    // Summary info bar
+    // Summary bar above table
     const existingInfo = document.querySelector('.generated-info');
     if (existingInfo) existingInfo.remove();
 
     const info = document.createElement('div');
-    info.className = 'alert alert-secondary mt-2 py-2 generated-info';
+    info.className = 'generated-info';
     info.innerHTML = `
-        <div class="row text-center small">
-            <div class="col fw-bold">Összes: ${data.length}</div>
-            <div class="col text-success">✓ Jogilag helyes: ${cntHelyes}</div>
-            <div class="col text-warning">⚠ Kérdéses: ${cntKerdezes}</div>
-            <div class="col text-danger">✗ Nincs egyezés: ${cntNincs}</div>
-            <div class="col">▲ ${positiveDiff} | ▼ ${negativeDiff} HUF-eltérés</div>
+        <div class="summary-stat">
+            <span class="text-muted">Összes:</span>
+            <strong>${data.length}</strong>
+        </div>
+        <div class="summary-divider"></div>
+        <div class="summary-stat">
+            <i class="bi bi-check-circle-fill text-success"></i>
+            <span class="text-muted">Jogilag helyes:</span>
+            <strong class="text-success">${cntHelyes}</strong>
+        </div>
+        <div class="summary-stat">
+            <i class="bi bi-exclamation-triangle-fill text-warning"></i>
+            <span class="text-muted">Kérdéses:</span>
+            <strong class="text-warning">${cntKerdezes}</strong>
+        </div>
+        <div class="summary-stat">
+            <i class="bi bi-x-circle-fill text-danger"></i>
+            <span class="text-muted">Nincs egyezés:</span>
+            <strong class="text-danger">${cntNincs}</strong>
+        </div>
+        <div class="ms-auto summary-stat">
+            <span class="text-danger fw-semibold">▲ ${positiveDiff}</span>
+            <span class="text-success fw-semibold ms-1">▼ ${negativeDiff}</span>
+            <span class="text-muted ms-1">HUF-eltérés</span>
         </div>`;
 
     const tc = document.querySelector('.table-container');
@@ -533,22 +579,23 @@ function renderTable(data) {
     if (dataTable) dataTable.destroy();
     dataTable = $('#dataTable').DataTable({
         language: { url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/hu.json' },
-        dom: 'Bfrtip',
+        dom: "<'row mt-3 mb-3'<'col-sm-12 col-md-3'l><'col-sm-12 col-md-6 text-center'B><'col-sm-12 col-md-3'f>>" +
+         "<'row'<'col-sm-12'tr>>" +
+         "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
         buttons: [
-            // Toggle filter: show only non-helyes rows
             {
                 text: '<i class="bi bi-funnel-fill me-1"></i>Csak problémás sorok',
-                className: 'btn btn-outline-danger',
+                className: 'btn btn-outline-danger btn-sm btn-export bg-danger text-light',
                 action: function(e, dt, node) {
                     filterProblemOnly = !filterProblemOnly;
-                    $(node).toggleClass('btn-outline-danger btn-danger active');
+                    $(node).toggleClass('btn-outline-danger btn-danger');
                     dt.draw();
                 }
             },
             {
                 extend: 'csv',
-                text: 'CSV letöltés',
-                className: 'btn btn-secondary',
+                text: '<i class="bi bi-filetype-csv me-1"></i>CSV',
+                className: 'btn btn-ghost-secondary btn-sm btn-export btn-csv',
                 bom: true,
                 exportOptions: {
                     columns: ':visible',
@@ -557,28 +604,23 @@ function renderTable(data) {
             },
             {
                 extend: 'excelHtml5',
-                text: 'Excel letöltés',
-                className: 'btn btn-success',
+                text: '<i class="bi bi-file-earmark-excel me-1"></i>Excel',
+                className: 'btn btn-ghost-secondary btn-sm btn-export btn-excel',
                 title: 'MNB árfolyam ellenőrzés',
                 exportOptions: {
                     columns: ':visible',
                     format: { body: exportBodyFormatter }
                 },
-                // Post-process XLSX: convert raw numeric cells in financial columns to
-                // inline strings with comma decimal (e.g. 398.93 → "398,93").
-                // This is necessary because DataTables Buttons strips commas when
-                // normalizing string values before writing XLSX numeric cells.
                 customize: function(xlsx) {
                     const sheet = xlsx.xl.worksheets['sheet1.xml'];
                     $('row', sheet).each(function() {
                         const r = parseInt($(this).attr('r'));
-                        if (r <= 1) return; // skip header row
+                        if (r <= 1) return;
                         NUM_COLS_XLSX.forEach(col => {
                             const cell = $('c[r="' + col + r + '"]', this);
                             if (!cell.length) return;
                             const numVal = parseFloat(cell.find('v').text());
                             if (!isNaN(numVal)) {
-                                // Replace numeric cell with inline string "398,93"
                                 const strVal = numVal.toFixed(2).replace('.', ',');
                                 cell.attr('t', 'inlineStr');
                                 cell.html('<is><t>' + strVal + '</t></is>');
@@ -588,8 +630,9 @@ function renderTable(data) {
                 }
             }
         ],
-        pageLength: 25,
-        order: [[12, 'desc']], // Eltérés (HUF) descending
+		lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "Összes"]], // Oldalszám választó opciók
+        pageLength: 10,
+        order: [[12, 'desc']],
         columnDefs: [
             { type: 'num',     targets: NUM_COLS_IDX.filter(i => i !== 13) },
             { type: 'num-fmt', targets: [13] },
@@ -602,28 +645,22 @@ function renderTable(data) {
     });
 }
 
-// Export body formatter: returns raw JS numbers for numeric columns so the
-// customize callback can convert them to comma-decimal inline strings in XLSX.
-// For CSV, the same raw number is written (dot decimal), which is standard.
-// Non-numeric columns are returned as plain text (HTML stripped).
+// ─── Export formatter ─────────────────────────────────────────────────────────
 function exportBodyFormatter(data, row, column, node) {
     if (NUM_COLS_IDX.includes(column)) {
-        // Prefer the raw JS float stored in data-n
         const raw = node ? node.getAttribute('data-n') : null;
         let n = (raw !== null && raw !== '') ? parseFloat(raw) : NaN;
         if (isNaN(n)) {
-            // Fallback: strip HTML, parse Hungarian-formatted number
             const text = String(data).replace(/<[^>]+>/g, '').trim();
             if (!text || text === '-' || text === '—') return '';
             n = parseFloat(text.replace(/\s/g, '').replace(/\./g, '').replace(',', '.').replace('%', ''));
         }
-        return isNaN(n) ? '' : n; // raw JS number
+        return isNaN(n) ? '' : n;
     }
     return String(data).replace(/<[^>]+>/g, '').trim();
 }
 
 // ─── State reset ──────────────────────────────────────────────────────────────
-// Clears all previous-session state so a new upload always starts clean.
 function resetState() {
     processedData     = [];
     rawExcelData      = null;
@@ -639,49 +676,155 @@ function resetState() {
     const auditEl = document.getElementById('auditDashboard');
     if (auditEl) auditEl.style.display = 'none';
 
+    const tableSection = document.getElementById('tableSection');
+    if (tableSection) tableSection.style.display = 'none';
+
     const infoBar = document.querySelector('.generated-info');
     if (infoBar) infoBar.remove();
 }
 
-// ─── Event handlers ───────────────────────────────────────────────────────────
+// ─── Upload area events ───────────────────────────────────────────────────────
 uploadArea.addEventListener('click', () => fileInput.click());
 
 uploadArea.addEventListener('dragover', e => {
     e.preventDefault();
-    uploadArea.style.borderColor = '#0d6efd';
-    uploadArea.style.backgroundColor = '#e9ecef';
+    uploadArea.classList.add('dragging');
 });
 
 uploadArea.addEventListener('dragleave', () => {
-    uploadArea.style.borderColor = '#dee2e6';
-    uploadArea.style.backgroundColor = '#f8f9fa';
+    uploadArea.classList.remove('dragging');
 });
 
 uploadArea.addEventListener('drop', e => {
     e.preventDefault();
-    uploadArea.style.borderColor = '#dee2e6';
-    uploadArea.style.backgroundColor = '#f8f9fa';
+    uploadArea.classList.remove('dragging');
     const files = e.dataTransfer.files;
-    if (files.length > 0) { loadConfig(); processExcel(files[0]); }
+    if (files.length > 0) {
+        selectedFile = files[0];
+        fileInput.value = '';
+        resetState();
+        // Show file ready bar
+        uploadArea.style.display = 'none';
+        if (fileReadyBar) fileReadyBar.style.display = 'flex';
+        if (selectedFileNameEl) selectedFileNameEl.textContent = selectedFile.name;
+        loadConfig();
+        processExcel(selectedFile);
+    }
 });
 
+// File input: show file ready bar on selection
 const btnProcess = document.getElementById('btn-process');
 
 fileInput.addEventListener('change', e => {
     if (e.target.files.length > 0) {
         selectedFile = e.target.files[0];
-        btnProcess.disabled = false;
-        resetState(); // clear previous results immediately on new file selection
+        if (btnProcess) btnProcess.disabled = false;
+        resetState();
+        uploadArea.style.display = 'none';
+        if (fileReadyBar) fileReadyBar.style.display = 'flex';
+        if (selectedFileNameEl) selectedFileNameEl.textContent = selectedFile.name;
     }
 });
 
-btnProcess.addEventListener('click', () => {
-    if (selectedFile) { loadConfig(); processExcel(selectedFile); }
-    else alert('Kérlek, előbb válassz ki egy fájlt!');
-});
+// Process button
+if (btnProcess) {
+    btnProcess.addEventListener('click', () => {
+        if (selectedFile) { loadConfig(); processExcel(selectedFile); }
+        else alert('Kérlek, előbb válassz ki egy fájlt!');
+    });
+}
 
+// Clear file button
+const clearFileBtn = document.getElementById('clearFileBtn');
+if (clearFileBtn) {
+    clearFileBtn.addEventListener('click', () => {
+        selectedFile = null;
+        fileInput.value = '';
+        if (btnProcess) btnProcess.disabled = true;
+        resetState();
+        // Show dropzone, hide file ready bar
+        uploadArea.style.display = '';
+        if (fileReadyBar) fileReadyBar.style.display = 'none';
+    });
+}
+
+// ─── UI Panel Toggles (Config & Info) ────────────────────────────────────────
+
+const configToggleBtn = document.getElementById('configToggleBtn');
+const configSection   = document.getElementById('configSection');
+const infoToggleBtn   = document.getElementById('infoToggleBtn');
+const infoSection     = document.getElementById('infoSection');
+
+// Helper funkció a panelek váltásához
+function togglePanel(button, sectionToOpen, sectionToClose) {
+    if (!button || !sectionToOpen) return;
+
+    const isVisible = sectionToOpen.style.display !== 'none';
+    
+    // Aktuális panel váltása
+    sectionToOpen.style.display = isVisible ? 'none' : 'block';
+    button.classList.toggle('active', !isVisible);
+
+    // A másik panel bezárása, ha nyitva lenne
+    if (!isVisible && sectionToClose) {
+        sectionToClose.style.display = 'none';
+        // Megkeressük a másik gombot az ID alapján a stílus levételéhez
+        const otherBtn = sectionToClose.id === 'configSection' ? configToggleBtn : infoToggleBtn;
+        if (otherBtn) otherBtn.classList.remove('active');
+    }
+}
+
+// Config gomb eseménykezelő
+if (configToggleBtn) {
+    configToggleBtn.addEventListener('click', () => {
+        togglePanel(configToggleBtn, configSection, infoSection);
+    });
+}
+
+// Info gomb eseménykezelő
+if (infoToggleBtn) {
+    infoToggleBtn.addEventListener('click', () => {
+        togglePanel(infoToggleBtn, infoSection, configSection);
+    });
+}
+
+// Bezáró gombok kezelése (X gombok a kártyák sarkában)
+const configCloseBtn = document.getElementById('configCloseBtn');
+if (configCloseBtn && configSection) {
+    configCloseBtn.addEventListener('click', () => {
+        configSection.style.display = 'none';
+        if (configToggleBtn) configToggleBtn.classList.remove('active');
+    });
+}
+
+const infoCloseBtn = document.getElementById('infoCloseBtn');
+if (infoCloseBtn && infoSection) {
+    infoCloseBtn.addEventListener('click', () => {
+        infoSection.style.display = 'none';
+        if (infoToggleBtn) infoToggleBtn.classList.remove('active');
+    });
+}
+
+// ─── Theme toggle ─────────────────────────────────────────────────────────────
+const themeToggleBtn = document.getElementById('themeToggleBtn');
+const themeIcon      = document.getElementById('themeIcon');
+
+if (themeToggleBtn) {
+    themeToggleBtn.addEventListener('click', () => {
+        const html   = document.documentElement;
+        const isDark = html.getAttribute('data-bs-theme') === 'dark';
+        html.setAttribute('data-bs-theme', isDark ? 'light' : 'dark');
+        if (themeIcon) {
+            themeIcon.className = isDark ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
+        }
+        themeToggleBtn.classList.toggle('active', !isDark);
+    });
+}
+
+// ─── Excel processing ─────────────────────────────────────────────────────────
 function processExcel(file) {
-    resetState(); // ensure a completely clean start before processing
+    resetState();
+    showLoading();
     const reader = new FileReader();
     reader.onload = e => {
         try {
@@ -695,12 +838,14 @@ function processExcel(file) {
         } catch (err) {
             console.error(err);
             alert('Hiba: ' + err.message);
+        } finally {
+            hideLoading();
         }
     };
     reader.readAsArrayBuffer(file);
 }
 
-// MNB info (elements may not exist if panel was removed – guard with ?.)
+// ─── MNB info elements ────────────────────────────────────────────────────────
 const availEl  = document.getElementById('availableRatesCount');
 const updateEl = document.getElementById('updateMNB');
 if (availEl)  availEl.textContent = MNB_RATES.data.length;
@@ -711,8 +856,7 @@ if (updateEl) {
 
 loadConfig();
 
-// Register once: custom search filter toggled by the "Csak problémás sorok" button.
-// Uses data-legal-category attribute set on each <tr> in renderTable.
+// Register custom DataTables search filter for "Csak problémás sorok"
 $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
     if (!filterProblemOnly || !dataTable) return true;
     const rowNode = dataTable.row(dataIndex).node();

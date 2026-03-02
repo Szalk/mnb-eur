@@ -1,7 +1,9 @@
-/* ===================================
+/* =====================================================
    DATATABLES CUSTOM STYLING
-   Professional Table Design
-   =================================== */
+   Corporate Dashboard – Professional Table Design
+   ===================================================== */
+
+/* ── Table Wrapper ──────────────────────────────────── */
 
 .table-wrapper {
     background: var(--bg-card);
@@ -17,25 +19,22 @@ table.dataTable {
     width: 100% !important;
 }
 
-/* ===================================
-   HEADER STYLES
-   =================================== */
+/* ── Header ─────────────────────────────────────────── */
 
 table.dataTable thead th {
-    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
-    color: var(--text-primary);
-    border-bottom: 3px solid var(--primary);
-    border-right: 1px solid rgba(226, 232, 240, 0.3);
-    font-weight: var(--font-bold);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    border-bottom: 2px solid var(--border-strong);
+    border-right: 1px solid var(--border-color);
+    font-weight: var(--font-semibold);
     text-transform: uppercase;
-    font-size: var(--text-xs);
-    letter-spacing: 0.5px;
-    padding: 16px 12px;
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    padding: 12px 12px;
     position: sticky;
     top: 0;
     z-index: 10;
     white-space: nowrap;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 table.dataTable thead th:last-child {
@@ -49,29 +48,33 @@ table.dataTable thead th.sorting_asc:after,
 table.dataTable thead th.sorting_desc:before,
 table.dataTable thead th.sorting_desc:after {
     color: var(--primary);
-    opacity: 0.7;
+    opacity: 0.65;
 }
 
-/* ===================================
-   STICKY CÉGNÉV COLUMN
-   =================================== */
+table.dataTable thead th.sorting_asc,
+table.dataTable thead th.sorting_desc {
+    color: var(--primary);
+    background: var(--primary-light);
+}
+
+/* ── Sticky First Column ────────────────────────────── */
 
 table.dataTable thead th.sticky-col,
 table.dataTable tbody td.sticky-col {
     background: var(--bg-card);
     font-weight: var(--font-semibold);
-    min-width: 200px;
-    max-width: 250px;
+    min-width: 190px;
+    max-width: 240px;
     position: sticky;
     left: 0;
     z-index: 20;
-    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
+    box-shadow: 2px 0 6px rgba(0, 0, 0, 0.06);
     border-right: 1px solid var(--border-color);
 }
 
 table.dataTable thead th.sticky-col {
     z-index: 30 !important;
-    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+    background: var(--bg-secondary);
 }
 
 table.dataTable tbody td.sticky-col {
@@ -88,7 +91,7 @@ table.dataTable tbody td.sticky-col .cell-value {
 }
 
 table.dataTable tbody tr:hover td.sticky-col {
-    background: linear-gradient(90deg, var(--primary-light) 0%, var(--bg-card) 100%);
+    background: var(--primary-light);
 }
 
 table.dataTable tbody tr:nth-child(even) td.sticky-col {
@@ -96,18 +99,16 @@ table.dataTable tbody tr:nth-child(even) td.sticky-col {
 }
 
 table.dataTable tbody tr:nth-child(even):hover td.sticky-col {
-    background: linear-gradient(90deg, var(--primary-light) 0%, var(--bg-secondary) 100%);
+    background: var(--primary-light);
 }
 
-/* ===================================
-   BODY ROWS
-   =================================== */
+/* ── Body Rows ──────────────────────────────────────── */
 
 table.dataTable tbody td {
-    border-bottom: 1px solid var(--border-light);
-    border-right: 1px solid rgba(226, 232, 240, 0.2);
+    border-bottom: 1px solid var(--border-color);
+    border-right: 1px solid rgba(var(--primary-rgb, 79,70,229), 0.04);
     color: var(--text-primary);
-    padding: 14px 12px;
+    padding: 12px 12px;
     vertical-align: middle;
     font-size: var(--text-sm);
     white-space: nowrap;
@@ -118,11 +119,11 @@ table.dataTable tbody td:last-child {
 }
 
 table.dataTable tbody tr {
-    transition: all var(--transition-fast) var(--easing);
+    transition: background var(--transition-fast) var(--easing);
 }
 
 table.dataTable tbody tr:hover {
-    background: linear-gradient(90deg, var(--primary-light) 0%, transparent 100%);
+    background: var(--primary-light) !important;
     box-shadow: inset 3px 0 0 var(--primary);
 }
 
@@ -130,13 +131,7 @@ table.dataTable tbody tr:nth-child(even) {
     background: var(--bg-secondary);
 }
 
-table.dataTable tbody tr:nth-child(even):hover {
-    background: linear-gradient(90deg, var(--primary-light) 0%, var(--bg-secondary) 100%);
-}
-
-/* ===================================
-   CELL CONTENT STYLES
-   =================================== */
+/* ── Cell Content Styles ────────────────────────────── */
 
 .cell-index {
     font-size: var(--text-xs);
@@ -172,34 +167,30 @@ table.dataTable tbody tr:nth-child(even):hover {
     text-overflow: ellipsis;
 }
 
-/* ===================================
-   BADGE STYLES IN TABLE
-   =================================== */
+/* ── Badge Styles in Table ──────────────────────────── */
 
-.badge.hasonlo { background: #d685ef; }
-.badge.hianyzik { background: #a78bfa; }
-.badge.konform { background: #34d399; }
-.badge.hiba-1 { background: #fb0d0d; }
-.badge.hiba-2 { background: #fb7185; }
-.badge.hiba-3 { background: #c98a14; }
-.badge.hiba-4 { background: #a7236b; }
-.badge.hiba-5 { background: #fdba74; }
-.badge.figyelem-1 { background: #f59e0b; }
-.badge.figyelem-2 { background: #3677bd; }
-.badge.nemSzolgatatosCim { background: #9ca3af; }
-.badge.nincs-bank { background: #bb2f2f; }
+.badge.hasonlo       { background: #d685ef; color: #fff; }
+.badge.hianyzik      { background: #a78bfa; color: #fff; }
+.badge.konform       { background: #34d399; color: #fff; }
+.badge.hiba-1        { background: #fb0d0d; color: #fff; }
+.badge.hiba-2        { background: #fb7185; color: #fff; }
+.badge.hiba-3        { background: #c98a14; color: #fff; }
+.badge.hiba-4        { background: #a7236b; color: #fff; }
+.badge.hiba-5        { background: #fdba74; color: #000; }
+.badge.figyelem-1    { background: #f59e0b; color: #000; }
+.badge.figyelem-2    { background: #3677bd; color: #fff; }
+.badge.nemSzolgatatosCim { background: #9ca3af; color: #fff; }
+.badge.nincs-bank    { background: #bb2f2f; color: #fff; }
 
-/* ===================================
-   DATATABLES CONTROLS
-   =================================== */
+/* ── DataTables Controls Wrapper ───────────────────── */
 
 .dataTables_wrapper {
-    padding: var(--spacing-lg);
+    padding: var(--spacing-md) var(--spacing-lg);
 }
 
 .dataTables_length,
 .dataTables_filter {
-    margin-bottom: var(--spacing-md);
+    margin-bottom: var(--spacing-sm);
 }
 
 .dataTables_length label,
@@ -213,104 +204,111 @@ table.dataTable tbody tr:nth-child(even):hover {
 }
 
 .dataTables_length select {
-    padding: 6px 12px;
-    border: 2px solid var(--border-color);
+    padding: 5px 10px;
+    border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     background: var(--bg-card);
     color: var(--text-primary);
     font-size: var(--text-sm);
+    transition: border-color var(--transition-fast) var(--easing);
+}
+
+.dataTables_length select:focus {
+    outline: none;
+    border-color: var(--primary);
 }
 
 .dataTables_filter input {
-    padding: 8px 16px;
-    border: 2px solid var(--border-color);
+    padding: 7px 14px;
+    border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     background: var(--bg-card);
     color: var(--text-primary);
     font-size: var(--text-sm);
-    min-width: 250px;
+    min-width: 230px;
+    transition: all var(--transition-base) var(--easing);
 }
 
 .dataTables_filter input:focus {
     outline: none;
     border-color: var(--primary);
-    box-shadow: 0 0 0 4px var(--primary-light);
+    box-shadow: 0 0 0 3px rgba(var(--primary-rgb, 79,70,229), 0.12);
 }
 
-/* ===================================
-   DATATABLES INFO & PAGINATION
-   =================================== */
+/* ── Info & Pagination ──────────────────────────────── */
 
 .dataTables_info {
-    color: var(--text-secondary);
+    color: var(--text-muted);
     font-size: var(--text-sm);
-    padding: var(--spacing-md) 0;
+    padding: var(--spacing-sm) 0;
 }
 
 .dataTables_paginate {
-    padding: var(--spacing-md) 0;
+    padding: var(--spacing-sm) 0;
 }
 
 .dataTables_paginate .paginate_button {
-    padding: 6px 12px;
-    margin: 0 4px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    background: var(--bg-card);
-    color: var(--text-primary) !important;
+    padding: 5px 11px;
+    margin: 0 2px;
+    border: 1px solid var(--border-color) !important;
+    border-radius: var(--radius-sm) !important;
+    background: var(--bg-card) !important;
+    color: var(--text-secondary) !important;
     cursor: pointer;
+    font-size: var(--text-sm);
     transition: all var(--transition-fast) var(--easing);
 }
 
 .dataTables_paginate .paginate_button:hover {
-    background: var(--bg-tertiary) !important;
+    background: var(--bg-secondary) !important;
     border-color: var(--primary) !important;
     color: var(--primary) !important;
 }
 
-.dataTables_paginate .paginate_button.current {
+.dataTables_paginate .paginate_button.current,
+.dataTables_paginate .paginate_button.current:hover {
     background: var(--primary) !important;
     border-color: var(--primary) !important;
-    color: white !important;
+    color: #fff !important;
+    box-shadow: 0 2px 6px rgba(var(--primary-rgb, 79,70,229), 0.35);
 }
 
 .dataTables_paginate .paginate_button.disabled {
-    opacity: 0.5;
+    opacity: 0.40;
     cursor: not-allowed;
 }
 
-/* ===================================
-   DATATABLES BUTTONS (Export)
-   =================================== */
+/* ── Export / Action Buttons ────────────────────────── */
 
 .dt-buttons {
     display: inline-flex;
     gap: var(--spacing-sm);
     align-items: center;
+    flex-wrap: wrap;
 }
 
 .btn-export {
     background: transparent !important;
     color: var(--text-secondary) !important;
     border: 1px solid var(--border-color) !important;
-    padding: 6px 12px !important;
+    padding: 5px 12px !important;
     border-radius: var(--radius-md) !important;
     font-weight: var(--font-medium) !important;
-    font-size: var(--text-sm) !important;
+    font-size: var(--text-xs) !important;
     cursor: pointer !important;
     transition: all var(--transition-base) var(--easing) !important;
     display: inline-flex !important;
     align-items: center !important;
     gap: 4px !important;
     white-space: nowrap !important;
+    letter-spacing: 0.01em !important;
 }
 
 .btn-export:hover {
-    background: var(--bg-card-hover) !important;
+    background: var(--bg-secondary) !important;
     color: var(--text-primary) !important;
     border-color: var(--primary) !important;
     transform: translateY(-1px);
-    box-shadow: var(--shadow-md) !important;
 }
 
 .btn-export.btn-excel:hover {
@@ -323,18 +321,56 @@ table.dataTable tbody tr:nth-child(even):hover {
     border-color: var(--info) !important;
 }
 
-/* ===================================
-   DARK MODE SPECIFIC ADJUSTMENTS
-   =================================== */
+/* Filter toggle button */
+button.btn-outline-danger.active,
+button.btn-danger.active {
+    background: var(--danger) !important;
+    border-color: var(--danger) !important;
+    color: #fff !important;
+}
+
+/* ── Dark Mode Adjustments ──────────────────────────── */
 
 [data-bs-theme="dark"] table.dataTable thead th {
-    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+    background: var(--bg-secondary);
+    border-bottom-color: var(--border-strong);
 }
 
 [data-bs-theme="dark"] table.dataTable tbody tr:nth-child(even) {
-    background: rgba(255, 255, 255, 0.02);
+    background: rgba(255, 255, 255, 0.025);
 }
 
 [data-bs-theme="dark"] table.dataTable tbody tr:hover {
-    background: linear-gradient(90deg, rgba(var(--primary-rgb), 0.1) 0%, transparent 100%);
+    background: var(--primary-light) !important;
+}
+
+[data-bs-theme="dark"] .dataTables_length select,
+[data-bs-theme="dark"] .dataTables_filter input {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+}
+
+[data-bs-theme="dark"] .dataTables_paginate .paginate_button {
+    background: var(--bg-secondary) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-secondary) !important;
+}
+
+[data-bs-theme="dark"] .dataTables_paginate .paginate_button:hover {
+    background: var(--bg-tertiary) !important;
+}
+
+/* ── Table container for scrolling ─────────────────── */
+
+.table-container {
+    overflow-x: auto;
+}
+
+#dataTable thead th {
+    white-space: nowrap;
+}
+
+#dataTable {
+    width: 100% !important;
 }
