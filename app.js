@@ -8,9 +8,9 @@ const CONFIG = {
         performanceDate:  'Teljesítés dátuma',
         currency:         'Számla pénzneme',
         eurAmount:        'Számla nettó összege a számla pénznemében',
-        hufAmount:        'Számla nettó összege forintban',
+        hufAmount:        'Számla számított nettó összege forintban',
         eurRate:          'Alkalmazott árfolyam',
-        transactionType:  'Ügylettípus'
+        transactionType:  'Vevő adószáma'
     },
     columnIndexes: {
         invoiceNum:-1, invoiceOperation:-1, issueDate:-1, performanceDate:-1, currency:-1,
@@ -137,61 +137,105 @@ function findBestRateMatch(invoiceRate, issueDateStr, perfDateStr, txType) {
 function buildLegalFeedback(bestMatch, difference = null) {
     if (!bestMatch) {
         return {
-            category:  'nincs',
+            category: 'nincs',
             iconClass: 'bi-x-circle-fill text-danger',
-            label:     'Nincs egyezés',
-            text:      'Az alkalmazott árfolyam valószínűleg nem felel meg a jogszabályi előírásoknak.'
+            label: 'Nincs egyezés',
+            text: 'Az alkalmazott árfolyam valószínűleg nem felel meg a jogszabályi előírásoknak.'
         };
     }
 
     const onFulfillment = bestMatch.matchType === 'exact' && bestMatch.anchorType === 'teljesítés';
+    const diffValue = difference !== null ? Math.abs(difference) : 0;
+    const hasCalcDiff = diffValue >= 0.01;
+
+    // Eltérés súlyosságának meghatározása
+    let severityText = '';
+    if (hasCalcDiff) {
+        if (diffValue >= 1 && diffValue <= 999) severityText = ' (nem jelentős eltérés)';
+        else if (diffValue >= 1000 && diffValue <= 5000) severityText = ' (jelentős eltérés)';
+        else if (diffValue > 5000) severityText = ' (nagy eltérés)';
+    }
 
     if (onFulfillment) {
-        const prevNote   = bestMatch.rateVersion === 'previous' ? ' / MNB előző napi' : '';
-        const hasCalcDiff = difference !== null && Math.abs(difference) >= 0.01;
+        const prevNote = bestMatch.rateVersion === 'previous' ? ' / MNB előző napi' : '';
+        
         if (hasCalcDiff) {
             return {
-                category:  'helyes',
-                iconClass: 'bi-check-circle text-success',
-                label:     'Jogilag helyes (eltéréssel)',
-                text:      `Az árfolyam helyes (${bestMatch.targetDate}${prevNote}), de számítási eltérés van (kerekítési különbség).`
+                // Ha van eltérés, a kategória 'discrepancy' lesz, hogy a UI tudja pirosítani a hátteret
+                category: 'discrepancy', 
+                iconClass: 'bi-exclamation-circle text-warning',
+                label: 'Jogilag helyes (eltéréssel)',
+                text: `Az árfolyam helyes (${bestMatch.targetDate}${prevNote}), de számítási eltérés van${severityText}.`
             };
         }
+        
         return {
-            category:  'helyes',
+            category: 'helyes',
             iconClass: 'bi-check-circle-fill text-success',
-            label:     'Jogilag helyes',
-            text:      `Az alkalmazott árfolyam helyes. Alapja: ${bestMatch.ruleName} szerinti dátum (${bestMatch.targetDate}${prevNote}).`
+            label: 'Az alkalmazott árfolyam helyes',
+            text: `Az alkalmazott árfolyam helyes. Alapja: ${bestMatch.ruleName} szerinti dátum (${bestMatch.targetDate}${prevNote}).`
         };
     }
 
+    // Ha megtaláltuk az árfolyamot (pl. kiállítás dátumánál), de nem teljesítés napján
     return {
-        category:  'kérdéses',
+        category: 'kérdéses',
         iconClass: 'bi-exclamation-triangle-fill text-warning',
-        label:     'Jogilag kérdéses',
-        text:      'Az alkalmazott árfolyam valószínűleg nem felel meg a jogszabályi előírásoknak.'
+        label: 'Jogilag kérdéses',
+        text: `Az alkalmazott árfolyam valószínűleg nem felel meg a jogszabályi előírásoknak${severityText}.`
     };
 }
 
 // ─── Source badge ─────────────────────────────────────────────────────────────
 function buildSourceBadge(bestMatch) {
     if (!bestMatch) {
-        return '<span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Nincs egyezés</span>';
+        return '<span class="badge bg-danger" title="Nincs releváns árfolyamadat"><i class="bi bi-x-circle me-1"></i>Nincs találat</span>';
     }
 
-    const dateLabel = bestMatch.anchorType === 'teljesítés' ? 'Teljesítés' : 'Kiállítás';
-    let natureLabel, cls;
+    // --- Dátum és Napnév előkészítése ---
+    const anchorDateDay = dayjs(bestMatch.anchorDate).locale('hu').format('dddd');
+    const tooltip = `${bestMatch.anchorType}: ${anchorDateDay}`;
 
-    if (bestMatch.matchType === 'exact') {
-        natureLabel = bestMatch.rateVersion === 'previous' ? 'előző nap' : 'azonos nap';
-        cls         = bestMatch.anchorType === 'teljesítés' ? 'bg-success' : 'bg-info';
+    const isTeljesites = bestMatch.anchorType === 'teljesítés';
+    const offset = Math.abs(bestMatch.dayOffset); // Eltérés napokban
+    
+    let cls = '';
+    let natureLabel = '';
+    const dateLabel = isTeljesites ? 'Teljesítés' : 'Kiállítás';
+
+    if (isTeljesites) {
+        // --- TELJESÍTÉS DÁTUMA (Zöld árnyalatok és Sárga) ---
+        if (bestMatch.matchType === 'exact') {
+            if (bestMatch.rateVersion === 'current') {
+                cls = 'badge-success-darker'; // Azonos nap
+                natureLabel = 'azonos nap';
+            } else {
+                cls = 'badge-success-medium'; // Előző nap
+                natureLabel = 'előző nap';
+            }
+        } else if (offset === 2) {
+            cls = 'badge-success-light'; // T-2 nap
+            natureLabel = 'T-2 nap';
+        } else {
+            cls = 'bg-warning text-dark'; // > 2 nap
+            const sign = bestMatch.dayOffset > 0 ? '+' : '';
+            natureLabel = `${sign}${bestMatch.dayOffset} nap`;
+        }
     } else {
-        const sign  = bestMatch.dayOffset > 0 ? '+' : '';
-        natureLabel = `${sign}${bestMatch.dayOffset}n`;
-        cls         = 'bg-warning text-dark';
+        // --- KIÁLLÍTÁS DÁTUMA (Kék árnyalatok) ---
+        if (bestMatch.matchType === 'exact') {
+            cls = 'badge-info-dark';
+            natureLabel = 'azonos nap';
+        } else {
+            cls = 'badge-info-light text-dark';
+            const sign = bestMatch.dayOffset > 0 ? '+' : '';
+            natureLabel = `${sign}${bestMatch.dayOffset} nap`;
+        }
     }
 
-    return `<span class="badge ${cls}"><i class="bi bi-currency-exchange me-1"></i>${dateLabel} · ${natureLabel}</span>`;
+    return `<span class="badge ${cls}" title="${tooltip}">
+                <i class="bi bi-currency-exchange me-1"></i>${dateLabel} · ${natureLabel}
+            </span>`;
 }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -478,8 +522,6 @@ function renderTable(data) {
 
         tr.innerHTML = `
             <td>${row.invoiceNum || '-'}</td>
-            <td>${row.invoiceOperation || '-'}</td>
-            <td>${row.txTypeValue || '-'}</td>
             <td class="text-center">${buildSourceBadge(row.bestMatch)}</td>
             <td>${row.issueDateDisplay}</td>
             <td>${row.performanceDateDisplay}</td>
@@ -491,6 +533,8 @@ function renderTable(data) {
             <td class="text-end" data-n="${row.calculatedHuf ?? ''}">${fmt(row.calculatedHuf, 2)}</td>
             <td class="text-end fw-semibold" data-n="${row.difference ?? ''}">${fmt(row.difference, 2)}</td>
             <td class="text-end" data-n="${row.differencePercent ?? ''}">${fmtPct(row.differencePercent)}</td>
+			<td>${row.invoiceOperation || '-'}</td>
+            <td>${row.txTypeValue || '-'}</td>
             <td class="small">${legalHtml}</td>`;
 
         tableBody.appendChild(tr);
@@ -535,11 +579,13 @@ function renderTable(data) {
     if (dataTable) dataTable.destroy();
     dataTable = $('#dataTable').DataTable({
         language: { url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/hu.json' },
-        dom: 'Bfrtip',
+        dom: "<'row mt-3 mb-3'<'col-sm-12 col-md-3'l><'col-sm-12 col-md-6 text-center'B><'col-sm-12 col-md-3'f>>" +
+         "<'row'<'col-sm-12'tr>>" +
+         "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
         buttons: [
             {
                 text: '<i class="bi bi-funnel-fill me-1"></i>Csak problémás sorok',
-                className: 'btn btn-outline-danger btn-sm',
+                className: 'btn btn-outline-danger btn-sm btn-export bg-danger text-light',
                 action: function(e, dt, node) {
                     filterProblemOnly = !filterProblemOnly;
                     $(node).toggleClass('btn-outline-danger btn-danger');
@@ -584,7 +630,8 @@ function renderTable(data) {
                 }
             }
         ],
-        pageLength: 25,
+		lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "Összes"]], // Oldalszám választó opciók
+        pageLength: 10,
         order: [[12, 'desc']],
         columnDefs: [
             { type: 'num',     targets: NUM_COLS_IDX.filter(i => i !== 13) },
@@ -701,23 +748,60 @@ if (clearFileBtn) {
     });
 }
 
-// ─── Config panel toggle ──────────────────────────────────────────────────────
+// ─── UI Panel Toggles (Config & Info) ────────────────────────────────────────
+
 const configToggleBtn = document.getElementById('configToggleBtn');
 const configSection   = document.getElementById('configSection');
+const infoToggleBtn   = document.getElementById('infoToggleBtn');
+const infoSection     = document.getElementById('infoSection');
 
-if (configToggleBtn && configSection) {
+// Helper funkció a panelek váltásához
+function togglePanel(button, sectionToOpen, sectionToClose) {
+    if (!button || !sectionToOpen) return;
+
+    const isVisible = sectionToOpen.style.display !== 'none';
+    
+    // Aktuális panel váltása
+    sectionToOpen.style.display = isVisible ? 'none' : 'block';
+    button.classList.toggle('active', !isVisible);
+
+    // A másik panel bezárása, ha nyitva lenne
+    if (!isVisible && sectionToClose) {
+        sectionToClose.style.display = 'none';
+        // Megkeressük a másik gombot az ID alapján a stílus levételéhez
+        const otherBtn = sectionToClose.id === 'configSection' ? configToggleBtn : infoToggleBtn;
+        if (otherBtn) otherBtn.classList.remove('active');
+    }
+}
+
+// Config gomb eseménykezelő
+if (configToggleBtn) {
     configToggleBtn.addEventListener('click', () => {
-        const isVisible = configSection.style.display !== 'none';
-        configSection.style.display = isVisible ? 'none' : 'block';
-        configToggleBtn.classList.toggle('active', !isVisible);
+        togglePanel(configToggleBtn, configSection, infoSection);
     });
 }
 
+// Info gomb eseménykezelő
+if (infoToggleBtn) {
+    infoToggleBtn.addEventListener('click', () => {
+        togglePanel(infoToggleBtn, infoSection, configSection);
+    });
+}
+
+// Bezáró gombok kezelése (X gombok a kártyák sarkában)
 const configCloseBtn = document.getElementById('configCloseBtn');
 if (configCloseBtn && configSection) {
     configCloseBtn.addEventListener('click', () => {
         configSection.style.display = 'none';
         if (configToggleBtn) configToggleBtn.classList.remove('active');
+    });
+}
+
+const infoCloseBtn = document.getElementById('infoCloseBtn');
+if (infoCloseBtn && infoSection) {
+    infoCloseBtn.addEventListener('click', () => {
+        infoSection.style.display = 'none';
+        if (infoToggleBtn) infoToggleBtn.classList.remove('active');
     });
 }
 
