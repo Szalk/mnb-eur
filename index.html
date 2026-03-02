@@ -54,9 +54,12 @@
             <span class="chip-count" id="availableRatesCount">0</span>
             <span>napi adat</span>
         </div>
-		<button class="topbar-icon-btn" id="searchToggleBtn" title="Árfolyam lekérdező">
+
+        <!-- Rate lookup toggle -->
+        <button class="topbar-icon-btn" id="searchToggleBtn" title="Gyors árfolyam-keresés">
             <i class="bi bi-search"></i>
-        </button> 
+        </button>
+
         <!-- Config toggle -->
         <button class="topbar-icon-btn" id="configToggleBtn" title="Oszlop-konfiguráció">
             <i class="bi bi-sliders"></i>
@@ -307,6 +310,40 @@
 </div>
 
 
+    <!-- ── RATE LOOKUP SECTION (hidden, toggled via topbar) ── -->
+    <div class="page-section" id="searchSection" style="display:none">
+        <div class="content-card">
+            <div class="content-card-header">
+                <div class="content-card-header-icon" style="background:var(--info-light,#ECFEFF);color:var(--info,#0891B2)">
+                    <i class="bi bi-search"></i>
+                </div>
+                <h2 class="content-card-title">Gyors árfolyam-keresés</h2>
+                <small class="ms-3 text-muted d-none d-md-inline">ÁFA tv. §80 – mindkét napi árfolyam megjelenítése</small>
+                <button class="topbar-icon-btn ms-auto" id="searchCloseBtn" title="Bezárás"
+                        style="background:var(--bg-secondary);border-color:var(--border-color);color:var(--text-secondary)">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <div class="content-card-body">
+                <div class="row g-3 align-items-end">
+                    <div class="col-auto">
+                        <label class="form-label">Dátum kiválasztása</label>
+                        <input type="date" class="form-control" id="rateSearchDate"
+                               style="min-width:180px">
+                    </div>
+                    <div class="col-auto">
+                        <button class="btn btn-primary" id="rateSearchBtn">
+                            <i class="bi bi-search me-1"></i>Árfolyam lekérdezése
+                        </button>
+                    </div>
+                </div>
+                <div id="rateSearchResult" style="display:none" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+    <!-- /RATE LOOKUP SECTION -->
+
+
     <!-- ── UPLOAD SECTION ────────────────────────────── -->
     <div class="page-section" id="uploadSection">
 
@@ -405,6 +442,32 @@
         </div>
     </div>
     <!-- /TABLE SECTION -->
+
+
+    <!-- ── CORRECTION ANALYSIS TABLE (filled by renderCorrectionTable) ── -->
+    <div class="page-section" id="correctionSection" style="display:none">
+        <div class="content-card">
+            <div class="content-card-header">
+                <div class="content-card-header-icon"
+                     style="background:var(--danger-light,#FEF2F2);color:var(--danger,#DC2626)">
+                    <i class="bi bi-clipboard2-data-fill"></i>
+                </div>
+                <h2 class="content-card-title">Pénzügyi korrekciós elemzés</h2>
+                <span class="badge ms-2" id="correctionCount"
+                      style="background:var(--danger);color:#fff;font-size:0.75rem">0</span>
+                <small class="ms-3 text-muted d-none d-md-inline">
+                    Hibás árfolyamú és eltérő HUF összegű számlák
+                </small>
+                <div class="ms-auto">
+                    <button class="btn btn-success btn-sm" id="exportCorrectionBtn">
+                        <i class="bi bi-file-earmark-excel me-1"></i>Korrekció exportálása (Excel)
+                    </button>
+                </div>
+            </div>
+            <div id="correctionTableContainer" style="overflow-x:auto"></div>
+        </div>
+    </div>
+    <!-- /CORRECTION SECTION -->
 
 </main>
 <!-- /MAIN CONTENT -->

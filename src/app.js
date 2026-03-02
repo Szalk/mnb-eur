@@ -43,34 +43,58 @@ const TRANSACTION_TYPES = {
 function detectTransactionType(cellValue) {
     if (!cellValue) return TRANSACTION_TYPES.EGYEB;
     const v = cellValue.toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    if (v.includes('kozosseg') || /\bkb\b/.test(v))             return TRANSACTION_TYPES.KB;
-    if (v.includes('eloleg'))                                    return TRANSACTION_TYPES.ELEG;
-    if (v.includes('fordito'))                                   return TRANSACTION_TYPES.FORDÍTOTT;
-    if (v.includes('idoszak') || v.includes('folyamatos'))       return TRANSACTION_TYPES.IDOSZAKOS;
+    if (v.includes('kozosseg') || /\bkb\b/.test(v))       return TRANSACTION_TYPES.KB;
+    if (v.includes('eloleg'))                              return TRANSACTION_TYPES.ELEG;
+    if (v.includes('fordito'))                             return TRANSACTION_TYPES.FORDÍTOTT;
+    if (v.includes('idoszak') || v.includes('folyamatos')) return TRANSACTION_TYPES.IDOSZAKOS;
     return TRANSACTION_TYPES.EGYEB;
 }
 
-// Returns { targetDate, ruleName, ruleDesc }
+// ─── Anchor date resolver ─────────────────────────────────────────────────────
+// Returns the legally required reference date for each transaction type.
+// § 80 VAT Act rules:
+//   KB / Periodic  → Invoice Issue Date (kiállítás napja)
+//   Advance        → Credit/Receipt Date (jóváírás/kézhezvétel napja = issue date)
+//   Reverse Tax    → Earlier of (issue date) or (15th of next month after performance)
+//   General        → Performance Date (teljesítés napja)
 function resolveTargetDate(txType, issueDateStr, perfDateStr) {
     const eff = perfDateStr || issueDateStr;
     switch (txType) {
         case TRANSACTION_TYPES.KB:
-            return { targetDate: issueDateStr, ruleName: 'Közösségen belüli termékbeszerzés', ruleDesc: 'kiállítás napja' };
+            return { targetDate: issueDateStr,
+                     ruleName: 'Közösségen belüli termékbeszerzés',
+                     ruleDesc: 'kiállítás napja' };
         case TRANSACTION_TYPES.ELEG:
-            return { targetDate: issueDateStr, ruleName: 'Előleg', ruleDesc: 'jóváírás/kézhezvétel napja' };
+            return { targetDate: issueDateStr,
+                     ruleName: 'Előleg',
+                     ruleDesc: 'jóváírás/kézhezvétel napja' };
         case TRANSACTION_TYPES.FORDÍTOTT: {
             const fifteenth = dayjs(eff).add(1, 'month').date(15).format('YYYY-MM-DD');
             const target = issueDateStr < fifteenth ? issueDateStr : fifteenth;
-            return { targetDate: target, ruleName: 'Fordított adózás', ruleDesc: 'kiállítás napja (legkorábbi elérhető)' };
+            return { targetDate: target,
+                     ruleName: 'Fordított adózás',
+                     ruleDesc: 'kiállítás napja (legkorábbi elérhető)' };
         }
         case TRANSACTION_TYPES.IDOSZAKOS:
-            return { targetDate: issueDateStr, ruleName: 'Időszakos elszámolás', ruleDesc: 'kiállítás napja' };
+            return { targetDate: issueDateStr,
+                     ruleName: 'Időszakos elszámolás',
+                     ruleDesc: 'kiállítás napja' };
         default:
-            return { targetDate: eff, ruleName: 'Egyéb eset', ruleDesc: 'teljesítés napja' };
+            return { targetDate: eff,
+                     ruleName: 'Egyéb eset',
+                     ruleDesc: 'teljesítés napja' };
     }
 }
 
 // ─── Core matching (dual-rate + tx-type routing) ──────────────────────────────
+// § 80 Dual Rate Rule: for any workday, BOTH the current day rate (T) AND the
+// previous workday rate (T-1) are legally valid.  We test both before falling
+// back to the ±30-day window.
+//
+// Matching phases:
+//   Phase 1 – exact match on the transaction-specific anchor date (T then T-1)
+//   Phase 2 – exact match on the secondary date (T then T-1)
+//   Phase 3 – closest match within a ±30-day window
 function findBestRateMatch(invoiceRate, issueDateStr, perfDateStr, txType) {
     if (!invoiceRate) return null;
     const TOL = 0.01;
@@ -86,6 +110,7 @@ function findBestRateMatch(invoiceRate, issueDateStr, perfDateStr, txType) {
                                     : (targetDate !== effectivePerfDate ? effectivePerfDate : null);
     const secondaryAnchorType = secondaryDate === effectivePerfDate ? 'teljesítés' : 'kiállítás';
 
+    // Try current-day then previous-day rate for a given anchor date
     const checkDual = (dateStr, anchorType) => {
         if (!dateStr) return null;
         const rT = getMnbRate(dateStr, RATE_TYPE.CURRENT_DAY);
@@ -105,14 +130,17 @@ function findBestRateMatch(invoiceRate, issueDateStr, perfDateStr, txType) {
         return null;
     };
 
+    // Phase 1 – primary anchor
     const m1 = checkDual(targetDate, targetAnchorType);
     if (m1) return m1;
 
+    // Phase 2 – secondary anchor
     if (secondaryDate) {
         const m2 = checkDual(secondaryDate, secondaryAnchorType);
         if (m2) return m2;
     }
 
+    // Phase 3 – ±30-day window
     const candidates = [];
     const windowDates = [[targetDate, targetAnchorType]];
     if (secondaryDate) windowDates.push([secondaryDate, secondaryAnchorType]);
@@ -133,110 +161,87 @@ function findBestRateMatch(invoiceRate, issueDateStr, perfDateStr, txType) {
     };
 }
 
-// ─── Strict 3-category legal classifier ──────────────────────────────────────
+// ─── Legal classifier (§ 80 three-category rule) ─────────────────────────────
+// 'helyes'   → exact match on the transaction's CORRECT anchor date (T or T-1).
+//              This correctly handles KB/Advance/Periodic (anchor = issue date)
+//              as well as the General case (anchor = performance date).
+// 'kérdéses' → match found, but on a different date or via window search.
+// 'nincs'    → no matching rate found at all.
 function buildLegalFeedback(bestMatch, difference = null) {
     if (!bestMatch) {
         return {
-            category: 'nincs',
+            category:  'nincs',
             iconClass: 'bi-x-circle-fill text-danger',
-            label: 'Nincs egyezés',
-            text: 'Az alkalmazott árfolyam valószínűleg nem felel meg a jogszabályi előírásoknak.'
+            label:     'Nincs egyezés',
+            text:      'Az alkalmazott árfolyam valószínűleg nem felel meg a jogszabályi előírásoknak.'
         };
     }
 
-    const onFulfillment = bestMatch.matchType === 'exact' && bestMatch.anchorType === 'teljesítés';
-    const diffValue = difference !== null ? Math.abs(difference) : 0;
-    const hasCalcDiff = diffValue >= 0.01;
+    // Correct anchor: the invoice rate must match EXACTLY on the transaction-type
+    // anchor date (targetDate), whether that is the issue date or performance date.
+    const onCorrectAnchor = bestMatch.matchType === 'exact'
+                         && bestMatch.anchorDate === bestMatch.targetDate;
 
-    // Eltérés súlyosságának meghatározása
-    let severityText = '';
-    if (hasCalcDiff) {
-        if (diffValue >= 1 && diffValue <= 999) severityText = ' (nem jelentős eltérés)';
-        else if (diffValue >= 1000 && diffValue <= 5000) severityText = ' (jelentős eltérés)';
-        else if (diffValue > 5000) severityText = ' (nagy eltérés)';
-    }
-
-    if (onFulfillment) {
-        const prevNote = bestMatch.rateVersion === 'previous' ? ' / MNB előző napi' : '';
-        
+    if (onCorrectAnchor) {
+        const prevNote    = bestMatch.rateVersion === 'previous' ? ' / MNB előző napi' : '';
+        const hasCalcDiff = difference !== null && Math.abs(difference) >= 0.01;
         if (hasCalcDiff) {
             return {
-                // Ha van eltérés, a kategória 'discrepancy' lesz, hogy a UI tudja pirosítani a hátteret
-                category: 'discrepancy', 
-                iconClass: 'bi-exclamation-circle text-warning',
-                label: 'Jogilag helyes (eltéréssel)',
-                text: `Az árfolyam helyes (${bestMatch.targetDate}${prevNote}), de számítási eltérés van${severityText}.`
+                category:  'helyes',
+                iconClass: 'bi-check-circle text-success',
+                label:     'Jogilag helyes (eltéréssel)',
+                text:      `Az árfolyam helyes (${bestMatch.targetDate}${prevNote}), de számítási eltérés van (kerekítési különbség).`
             };
         }
-        
         return {
-            category: 'helyes',
+            category:  'helyes',
             iconClass: 'bi-check-circle-fill text-success',
-            label: 'Az alkalmazott árfolyam helyes',
-            text: `Az alkalmazott árfolyam helyes. Alapja: ${bestMatch.ruleName} szerinti dátum (${bestMatch.targetDate}${prevNote}).`
+            label:     'Jogilag helyes',
+            text:      `Az alkalmazott árfolyam helyes. Alapja: ${bestMatch.ruleName} szerinti dátum (${bestMatch.targetDate}${prevNote}).`
         };
     }
 
-    // Ha megtaláltuk az árfolyamot (pl. kiállítás dátumánál), de nem teljesítés napján
     return {
-        category: 'kérdéses',
+        category:  'kérdéses',
         iconClass: 'bi-exclamation-triangle-fill text-warning',
-        label: 'Jogilag kérdéses',
-        text: `Az alkalmazott árfolyam valószínűleg nem felel meg a jogszabályi előírásoknak${severityText}.`
+        label:     'Jogilag kérdéses',
+        text:      'Az alkalmazott árfolyam valószínűleg nem felel meg a jogszabályi előírásoknak.'
     };
 }
 
 // ─── Source badge ─────────────────────────────────────────────────────────────
 function buildSourceBadge(bestMatch) {
     if (!bestMatch) {
-        return '<span class="badge bg-danger" title="Nincs releváns árfolyamadat"><i class="bi bi-x-circle me-1"></i>Nincs találat</span>';
+        return '<span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Nincs egyezés</span>';
     }
-
-    // --- Dátum és Napnév előkészítése ---
-    const anchorDateDay = dayjs(bestMatch.anchorDate).locale('hu').format('dddd');
-    const tooltip = `${bestMatch.anchorType}: ${anchorDateDay}`;
-
-    const isTeljesites = bestMatch.anchorType === 'teljesítés';
-    const offset = Math.abs(bestMatch.dayOffset); // Eltérés napokban
-    
-    let cls = '';
-    let natureLabel = '';
-    const dateLabel = isTeljesites ? 'Teljesítés' : 'Kiállítás';
-
-    if (isTeljesites) {
-        // --- TELJESÍTÉS DÁTUMA (Zöld árnyalatok és Sárga) ---
-        if (bestMatch.matchType === 'exact') {
-            if (bestMatch.rateVersion === 'current') {
-                cls = 'badge-success-darker'; // Azonos nap
-                natureLabel = 'azonos nap';
-            } else {
-                cls = 'badge-success-medium'; // Előző nap
-                natureLabel = 'előző nap';
-            }
-        } else if (offset === 2) {
-            cls = 'badge-success-light'; // T-2 nap
-            natureLabel = 'T-2 nap';
-        } else {
-            cls = 'bg-warning text-dark'; // > 2 nap
-            const sign = bestMatch.dayOffset > 0 ? '+' : '';
-            natureLabel = `${sign}${bestMatch.dayOffset} nap`;
-        }
+    const dateLabel = bestMatch.anchorType === 'teljesítés' ? 'Teljesítés' : 'Kiállítás';
+    let natureLabel, cls;
+    if (bestMatch.matchType === 'exact') {
+        natureLabel = bestMatch.rateVersion === 'previous' ? 'előző nap' : 'azonos nap';
+        cls         = bestMatch.anchorDate === bestMatch.targetDate ? 'bg-success' : 'bg-info';
     } else {
-        // --- KIÁLLÍTÁS DÁTUMA (Kék árnyalatok) ---
-        if (bestMatch.matchType === 'exact') {
-            cls = 'badge-info-dark';
-            natureLabel = 'azonos nap';
-        } else {
-            cls = 'badge-info-light text-dark';
-            const sign = bestMatch.dayOffset > 0 ? '+' : '';
-            natureLabel = `${sign}${bestMatch.dayOffset} nap`;
-        }
+        const sign  = bestMatch.dayOffset > 0 ? '+' : '';
+        natureLabel = `${sign}${bestMatch.dayOffset}n`;
+        cls         = 'bg-warning text-dark';
     }
-
-    return `<span class="badge ${cls}" title="${tooltip}">
-                <i class="bi bi-currency-exchange me-1"></i>${dateLabel} · ${natureLabel}
-            </span>`;
+    return `<span class="badge ${cls}"><i class="bi bi-currency-exchange me-1"></i>${dateLabel} · ${natureLabel}</span>`;
 }
+
+// ─── Formatting helpers ───────────────────────────────────────────────────────
+// Display: Hungarian locale (space thousands, comma decimal)
+const fmtHU = (n, d = 2) => {
+    if (n === null || n === undefined) return '–';
+    return new Intl.NumberFormat('hu-HU', {
+        minimumFractionDigits: d,
+        maximumFractionDigits: d
+    }).format(n);
+};
+
+// Excel export: comma decimal, no thousands separator
+const fmtComma = (n, d = 2) => {
+    if (n === null || n === undefined) return '–';
+    return Number(n).toFixed(d).replace('.', ',');
+};
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 function loadConfig() {
@@ -320,25 +325,18 @@ function processExcelData(data, headerRowIndex) {
         const excelEurRate = ci.eurRate !== -1 ? parseNumber(row[ci.eurRate], true) : null;
         if (excelEurRate === null) continue;
 
-        const invoiceNum       = ci.invoiceNum !== -1 ? (row[ci.invoiceNum] || '') : '';
+        const invoiceNum       = ci.invoiceNum      !== -1 ? (row[ci.invoiceNum]      || '') : '';
         const invoiceOperation = ci.invoiceOperation !== -1 ? (row[ci.invoiceOperation] || '') : '';
-        const issueDateValue   = ci.issueDate !== -1 ? row[ci.issueDate] : null;
-        const perfDateValue    = ci.performanceDate !== -1 ? row[ci.performanceDate] : null;
-        const eurAmount        = ci.eurAmount !== -1 ? parseNumber(row[ci.eurAmount]) : null;
-        const hufAmount        = ci.hufAmount !== -1 ? parseNumber(row[ci.hufAmount]) : null;
-        const txTypeValue      = ci.transactionType !== -1 ? row[ci.transactionType] : null;
+        const issueDateValue   = ci.issueDate       !== -1 ? row[ci.issueDate]        : null;
+        const perfDateValue    = ci.performanceDate !== -1 ? row[ci.performanceDate]  : null;
+        const eurAmount        = ci.eurAmount       !== -1 ? parseNumber(row[ci.eurAmount])  : null;
+        const hufAmount        = ci.hufAmount       !== -1 ? parseNumber(row[ci.hufAmount])  : null;
+        const txTypeValue      = ci.transactionType !== -1 ? row[ci.transactionType]  : null;
 
         const issueDateStr = formatDate(issueDateValue);
         if (!issueDateStr || eurAmount === null) continue;
 
         const perfDateStr = formatDate(perfDateValue) || issueDateStr;
-
-        const mnbPerfResult  = getMnbRate(perfDateStr, RATE_TYPE.CURRENT_DAY);
-        const mnbIssueResult = issueDateStr !== perfDateStr
-            ? getMnbRate(issueDateStr, RATE_TYPE.CURRENT_DAY)
-            : mnbPerfResult;
-        const mnbPerfRate  = mnbPerfResult  ? mnbPerfResult.rate  : null;
-        const mnbIssueRate = mnbIssueResult ? mnbIssueResult.rate : null;
 
         const txType    = detectTransactionType(txTypeValue);
         const bestMatch = findBestRateMatch(excelEurRate, issueDateStr, perfDateStr, txType);
@@ -348,6 +346,7 @@ function processExcelData(data, headerRowIndex) {
         const matchingGenerated = bestMatch ? bestMatch.generated   : false;
         const dayDifference     = bestMatch ? bestMatch.dayOffset   : null;
 
+        // Difference between applied rate and best-matched rate
         const calculatedHuf = (eurAmount && matchingRate)
             ? parseFloat((eurAmount * matchingRate).toFixed(2))
             : null;
@@ -369,6 +368,26 @@ function processExcelData(data, headerRowIndex) {
 
         const legalFeedback = buildLegalFeedback(bestMatch, difference);
 
+        // ── Correction analysis fields ─────────────────────────────────────────
+        // suggestedRate: the "correct" T-rate for the transaction's anchor date,
+        // regardless of what was applied.  Used to show what SHOULD have been used.
+        const { targetDate: resolvedTargetDate } = resolveTargetDate(txType, issueDateStr, perfDateStr);
+        const suggestedMnbResult = getMnbRate(resolvedTargetDate, RATE_TYPE.CURRENT_DAY);
+        const suggestedRate      = suggestedMnbResult?.rate ?? null;
+        const correctedHuf       = (eurAmount !== null && suggestedRate !== null)
+            ? parseFloat((eurAmount * suggestedRate).toFixed(2))
+            : null;
+        const correctionDiscrepancy = (hufAmount !== null && correctedHuf !== null)
+            ? parseFloat((hufAmount - correctedHuf).toFixed(2))
+            : null;
+
+        const mnbPerfResult  = getMnbRate(perfDateStr, RATE_TYPE.CURRENT_DAY);
+        const mnbIssueResult = issueDateStr !== perfDateStr
+            ? getMnbRate(issueDateStr, RATE_TYPE.CURRENT_DAY)
+            : mnbPerfResult;
+        const mnbPerfRate  = mnbPerfResult  ? mnbPerfResult.rate  : null;
+        const mnbIssueRate = mnbIssueResult ? mnbIssueResult.rate : null;
+
         processed.push({
             invoiceNum, invoiceOperation,
             issueDate: issueDateValue,
@@ -380,7 +399,9 @@ function processExcelData(data, headerRowIndex) {
             txType, txTypeValue,
             bestMatch, matchingRate, matchingDate, matchingGenerated, dayDifference,
             legalFeedback,
-            calculatedHuf, difference, differencePercent, diffClass
+            calculatedHuf, difference, differencePercent, diffClass,
+            // Correction analysis
+            resolvedTargetDate, suggestedRate, correctedHuf, correctionDiscrepancy
         });
     }
     return processed;
@@ -450,11 +471,244 @@ function renderDashboard(data) {
         <div class="legal-note">
             <i class="bi bi-info-circle flex-shrink-0"></i>
             <span>
-                <strong>Jogilag helyes</strong> = az árfolyam egyezik a teljesítés napján érvényes
-                MNB-árfolyammal (T vagy T−1). Bármely más dátumra eső egyezés
-                <strong>kérdéses</strong> és kézi felülvizsgálatot igényel.
+                <strong>Jogilag helyes</strong> = az árfolyam egyezik az ügylettípus szerinti helyes
+                dátumra érvényes MNB-árfolyammal (T vagy T−1).
+                Bármely más dátumra eső egyezés <strong>kérdéses</strong> és kézi felülvizsgálatot igényel.
             </span>
         </div>`;
+}
+
+// ─── Financial Correction Analysis Table ─────────────────────────────────────
+// Shows rows where the rate is not legally correct OR where a significant HUF
+// discrepancy exists versus the correct MNB rate.
+function renderCorrectionTable(data) {
+    const section   = document.getElementById('correctionSection');
+    const container = document.getElementById('correctionTableContainer');
+    const badge     = document.getElementById('correctionCount');
+    if (!section || !container) return;
+
+    // Include: legally non-compliant OR HUF amount differs by more than 1 HUF
+    const rows = data.filter(r =>
+        r.legalFeedback.category !== 'helyes' ||
+        (r.correctionDiscrepancy !== null && Math.abs(r.correctionDiscrepancy) > 1)
+    );
+
+    if (!rows.length) {
+        section.style.display = 'none';
+        return;
+    }
+
+    section.style.display = '';
+    if (badge) badge.textContent = rows.length;
+
+    let totalDisc = 0;
+    rows.forEach(r => { if (r.correctionDiscrepancy !== null) totalDisc += r.correctionDiscrepancy; });
+
+    const rowsHtml = rows.map(r => {
+        const discVal   = r.correctionDiscrepancy;
+        const discCls   = discVal === null ? ''
+                        : discVal > 0     ? 'text-danger fw-semibold'
+                        : discVal < 0     ? 'text-success fw-semibold'
+                        :                   'text-muted';
+        const legalBadge = r.legalFeedback.category === 'nincs'
+            ? '<span class="badge bg-danger">Nincs egyezés</span>'
+            : r.legalFeedback.category === 'kérdéses'
+                ? '<span class="badge bg-warning text-dark">Kérdéses</span>'
+                : '<span class="badge bg-success">Helyes</span>';
+
+        return `<tr>
+            <td><span class="fw-medium">${r.invoiceNum || '–'}</span>
+                <div class="small mt-1">${legalBadge}</div></td>
+            <td class="text-end">${fmtHU(r.eurAmount)}</td>
+            <td class="text-end">${fmtHU(r.hufAmount)}</td>
+            <td class="text-end fw-semibold text-primary">${fmtHU(r.suggestedRate)}<br>
+                <small class="text-muted fw-normal">${r.resolvedTargetDate || '–'}</small></td>
+            <td class="text-end">${fmtHU(r.correctedHuf)}</td>
+            <td class="text-end ${discCls}">${fmtHU(discVal)}</td>
+        </tr>`;
+    }).join('');
+
+    const totalCls = totalDisc > 0 ? 'text-danger' : totalDisc < 0 ? 'text-success' : '';
+
+    container.innerHTML = `
+        <table class="table table-bordered correction-table">
+            <thead>
+                <tr>
+                    <th>Számla azonosító</th>
+                    <th class="text-end" title="Devizás nettó összeg (EUR)">Forrás EUR</th>
+                    <th class="text-end" title="HUF összeg a számlán (forrásból)">Számla HUF (forrás)</th>
+                    <th class="text-end" title="Jogilag helyes MNB-árfolyam az ügylettípus szerinti dátumra (T)">
+                        Javasolt MNB árfolyam</th>
+                    <th class="text-end" title="EUR összeg × Javasolt MNB árfolyam">
+                        Korrigált HUF összeg</th>
+                    <th class="text-end" title="Számla HUF − Korrigált HUF (pozitív = túlszámlázott)">
+                        Eltérés (HUF)</th>
+                </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+            <tfoot>
+                <tr class="correction-total-row">
+                    <td colspan="5" class="text-end">
+                        <strong>Teljes pénzügyi hatás (HUF):</strong>
+                    </td>
+                    <td class="text-end ${totalCls}">
+                        <strong>${fmtHU(totalDisc)}</strong>
+                    </td>
+                </tr>
+            </tfoot>
+        </table>`;
+}
+
+// ─── Excel export for correction table ───────────────────────────────────────
+function exportCorrectionToExcel() {
+    const rows = processedData.filter(r =>
+        r.legalFeedback.category !== 'helyes' ||
+        (r.correctionDiscrepancy !== null && Math.abs(r.correctionDiscrepancy) > 1)
+    );
+
+    if (!rows.length) { alert('Nincs korrekciós adat az exportáláshoz!'); return; }
+
+    const wsData = [[
+        'Számla azonosító',
+        'Jogi értékelés',
+        'Forrás EUR',
+        'Számla HUF (forrás)',
+        'Javasolt MNB árfolyam',
+        'Helyes dátum',
+        'Korrigált HUF összeg',
+        'Eltérés (HUF)'
+    ]];
+
+    let totalDisc = 0;
+    rows.forEach(r => {
+        const disc = r.correctionDiscrepancy ?? null;
+        if (disc !== null) totalDisc += disc;
+        wsData.push([
+            r.invoiceNum || '',
+            r.legalFeedback.label,
+            fmtComma(r.eurAmount),
+            fmtComma(r.hufAmount),
+            fmtComma(r.suggestedRate),
+            r.resolvedTargetDate || '',
+            fmtComma(r.correctedHuf),
+            fmtComma(disc)
+        ]);
+    });
+
+    // Footer: total impact row
+    wsData.push(['ÖSSZESEN', '', '', '', '', '', '', fmtComma(totalDisc)]);
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws['!cols'] = [
+        {wch:28},{wch:22},{wch:14},{wch:22},{wch:22},{wch:14},{wch:22},{wch:18}
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Korrekciós elemzés');
+
+    const ts  = MNB_RATES.ts;
+    const sfx = `${ts.slice(0,4)}${ts.slice(4,6)}${ts.slice(6,8)}`;
+    XLSX.writeFile(wb, `mnb_korrekciok_${sfx}.xlsx`);
+}
+
+// ─── Rate lookup ──────────────────────────────────────────────────────────────
+// Implements the § 80 dual-rate display: on a workday show both T and T-1.
+// On weekends / holidays show only the last available rate with an explanation.
+function renderRateSearchResult(dateStr) {
+    const resultEl = document.getElementById('rateSearchResult');
+    if (!resultEl) return;
+    if (!dateStr) { resultEl.style.display = 'none'; return; }
+
+    const currentResult  = getMnbRate(dateStr, RATE_TYPE.CURRENT_DAY);
+    const previousResult = getMnbRate(dateStr, RATE_TYPE.PREVIOUS_DAY);
+
+    if (!currentResult || currentResult.rate === null) {
+        resultEl.style.display = '';
+        resultEl.innerHTML = `
+            <div class="rate-result-card">
+                <div class="rate-result-date-bar">
+                    <i class="bi bi-calendar3"></i><strong>${dateStr}</strong>
+                    <span class="badge bg-secondary ms-2">Nincs adat</span>
+                </div>
+                <div class="rate-result-nodata">
+                    <i class="bi bi-database-x fs-2 d-block mb-2"></i>
+                    Erre a dátumra nem áll rendelkezésre MNB-árfolyam az adatbázisban.
+                </div>
+            </div>`;
+        return;
+    }
+
+    const HU_DAYS = ['vasárnap','hétfő','kedd','szerda','csütörtök','péntek','szombat'];
+    const dayName = HU_DAYS[new Date(dateStr + 'T12:00:00').getDay()];
+
+    // A date is a "workday" if the data has a non-generated entry for it
+    const isWorkday = !currentResult.generated && currentResult.appliedDate === dateStr;
+
+    const fmtR = r => r ? fmtHU(r.rate) + ' HUF' : '–';
+
+    if (isWorkday) {
+        resultEl.style.display = '';
+        resultEl.innerHTML = `
+            <div class="rate-result-card">
+                <div class="rate-result-date-bar">
+                    <i class="bi bi-calendar3"></i>
+                    <strong>${dateStr}</strong>
+                    <span class="text-muted ms-1">(${dayName})</span>
+                    <span class="badge bg-success ms-2">Munkanap</span>
+                    <small class="ms-auto text-muted">ÁFA tv. §80 – mindkét árfolyam jogilag elfogadható</small>
+                </div>
+                <div class="rate-result-grid">
+                    <div class="rate-result-item">
+                        <div class="rate-result-label">Aktuális napi árfolyam (T)</div>
+                        <div class="rate-result-value">${fmtHU(currentResult.rate)}
+                            <span class="rate-result-currency">HUF</span></div>
+                        <div class="rate-result-date-sub">Dátum: ${currentResult.appliedDate}</div>
+                        <div class="rate-result-badge">
+                            <i class="bi bi-check-circle-fill"></i>Jogilag elfogadható (T)
+                        </div>
+                    </div>
+                    <div class="rate-result-item">
+                        <div class="rate-result-label">Előző munkanap árfolyama (T−1)</div>
+                        <div class="rate-result-value">${fmtHU(previousResult?.rate)}
+                            <span class="rate-result-currency">HUF</span></div>
+                        <div class="rate-result-date-sub">Dátum: ${previousResult?.appliedDate || '–'}</div>
+                        <div class="rate-result-badge">
+                            <i class="bi bi-check-circle-fill"></i>Jogilag elfogadható (T−1)
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+    } else {
+        // Weekend or holiday: only the last available workday rate applies
+        const validDate = currentResult.appliedDate;
+        resultEl.style.display = '';
+        resultEl.innerHTML = `
+            <div class="rate-result-card">
+                <div class="rate-result-date-bar">
+                    <i class="bi bi-calendar3"></i>
+                    <strong>${dateStr}</strong>
+                    <span class="text-muted ms-1">(${dayName})</span>
+                    <span class="badge bg-warning text-dark ms-2">Nem munkanap</span>
+                </div>
+                <div class="rate-result-weekend-panel">
+                    <div class="rate-result-label">Érvényes árfolyam (utolsó munkanap)</div>
+                    <div class="rate-result-value">${fmtHU(currentResult.rate)}
+                        <span class="rate-result-currency">HUF</span></div>
+                    <div class="rate-result-date-sub">Forrás dátum: ${validDate}</div>
+                    <div class="rate-result-badge rate-result-badge--warning">
+                        <i class="bi bi-info-circle-fill"></i>Csak ez az árfolyam érvényes
+                    </div>
+                </div>
+                <div class="rate-result-note">
+                    <i class="bi bi-info-circle flex-shrink-0"></i>
+                    <span>
+                        Hétvégi és ünnepnapi számlák esetén kizárólag az előző munkanapra érvényes
+                        MNB-árfolyam alkalmazható
+                        (<strong>${validDate}</strong> → <strong>${fmtHU(currentResult.rate)} HUF</strong>).
+                    </span>
+                </div>
+            </div>`;
+    }
 }
 
 // ─── Table rendering ──────────────────────────────────────────────────────────
@@ -471,16 +725,16 @@ function renderTable(data) {
     }
 
     renderDashboard(data);
+    renderCorrectionTable(data);
 
-    // Show table section
     const tableSection = document.getElementById('tableSection');
     if (tableSection) tableSection.style.display = '';
 
     let positiveDiff = 0, negativeDiff = 0;
     let cntHelyes = 0, cntKerdezes = 0, cntNincs = 0;
 
-    const fmt    = (n, d=0) => n == null ? '-' : new Intl.NumberFormat('hu-HU', {minimumFractionDigits:d, maximumFractionDigits:d}).format(n);
-    const fmtPct = n => n == null ? '-' : new Intl.NumberFormat('hu-HU', {minimumFractionDigits:2, maximumFractionDigits:2}).format(n) + '%';
+    const fmt    = (n, d = 0) => fmtHU(n, d);
+    const fmtPct = n => n == null ? '–' : fmtHU(n, 2) + '%';
 
     data.forEach(row => {
         const tr = document.createElement('tr');
@@ -503,7 +757,7 @@ function renderTable(data) {
             if (row.difference < -1) negativeDiff++;
         }
 
-        let srcDateHtml = '-';
+        let srcDateHtml = '–';
         if (row.matchingDate) {
             const offsetHtml = (row.dayDifference !== null && row.dayDifference !== 0)
                 ? ` <small class="text-muted">(${row.dayDifference > 0 ? '+' : ''}${row.dayDifference}n)</small>`
@@ -521,7 +775,9 @@ function renderTable(data) {
         const legalHtml = `<i class="bi ${lf.iconClass} me-1"></i><span class="legal-feedback">${lf.text}</span>`;
 
         tr.innerHTML = `
-            <td>${row.invoiceNum || '-'}</td>
+            <td>${row.invoiceNum || '–'}</td>
+            <td>${row.invoiceOperation || '–'}</td>
+            <td>${row.txTypeValue || '–'}</td>
             <td class="text-center">${buildSourceBadge(row.bestMatch)}</td>
             <td>${row.issueDateDisplay}</td>
             <td>${row.performanceDateDisplay}</td>
@@ -533,8 +789,6 @@ function renderTable(data) {
             <td class="text-end" data-n="${row.calculatedHuf ?? ''}">${fmt(row.calculatedHuf, 2)}</td>
             <td class="text-end fw-semibold" data-n="${row.difference ?? ''}">${fmt(row.difference, 2)}</td>
             <td class="text-end" data-n="${row.differencePercent ?? ''}">${fmtPct(row.differencePercent)}</td>
-			<td>${row.invoiceOperation || '-'}</td>
-            <td>${row.txTypeValue || '-'}</td>
             <td class="small">${legalHtml}</td>`;
 
         tableBody.appendChild(tr);
@@ -579,13 +833,11 @@ function renderTable(data) {
     if (dataTable) dataTable.destroy();
     dataTable = $('#dataTable').DataTable({
         language: { url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/hu.json' },
-        dom: "<'row mt-3 mb-3'<'col-sm-12 col-md-3'l><'col-sm-12 col-md-6 text-center'B><'col-sm-12 col-md-3'f>>" +
-         "<'row'<'col-sm-12'tr>>" +
-         "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
+        dom: 'Bfrtip',
         buttons: [
             {
                 text: '<i class="bi bi-funnel-fill me-1"></i>Csak problémás sorok',
-                className: 'btn btn-outline-danger btn-sm btn-export bg-danger text-light',
+                className: 'btn btn-outline-danger btn-sm',
                 action: function(e, dt, node) {
                     filterProblemOnly = !filterProblemOnly;
                     $(node).toggleClass('btn-outline-danger btn-danger');
@@ -630,8 +882,7 @@ function renderTable(data) {
                 }
             }
         ],
-		lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "Összes"]], // Oldalszám választó opciók
-        pageLength: 10,
+        pageLength: 25,
         order: [[12, 'desc']],
         columnDefs: [
             { type: 'num',     targets: NUM_COLS_IDX.filter(i => i !== 13) },
@@ -652,7 +903,7 @@ function exportBodyFormatter(data, row, column, node) {
         let n = (raw !== null && raw !== '') ? parseFloat(raw) : NaN;
         if (isNaN(n)) {
             const text = String(data).replace(/<[^>]+>/g, '').trim();
-            if (!text || text === '-' || text === '—') return '';
+            if (!text || text === '–' || text === '—') return '';
             n = parseFloat(text.replace(/\s/g, '').replace(/\./g, '').replace(',', '.').replace('%', ''));
         }
         return isNaN(n) ? '' : n;
@@ -668,19 +919,21 @@ function resetState() {
 
     if (tableBody) tableBody.innerHTML = '';
 
-    if (dataTable) {
-        dataTable.destroy();
-        dataTable = null;
-    }
+    if (dataTable) { dataTable.destroy(); dataTable = null; }
 
-    const auditEl = document.getElementById('auditDashboard');
-    if (auditEl) auditEl.style.display = 'none';
-
-    const tableSection = document.getElementById('tableSection');
-    if (tableSection) tableSection.style.display = 'none';
+    const els = [
+        document.getElementById('auditDashboard'),
+        document.getElementById('tableSection'),
+        document.getElementById('correctionSection')
+    ];
+    els.forEach(el => { if (el) el.style.display = 'none'; });
 
     const infoBar = document.querySelector('.generated-info');
     if (infoBar) infoBar.remove();
+
+    // Reset rate search result
+    const rsr = document.getElementById('rateSearchResult');
+    if (rsr) rsr.style.display = 'none';
 }
 
 // ─── Upload area events ───────────────────────────────────────────────────────
@@ -703,7 +956,6 @@ uploadArea.addEventListener('drop', e => {
         selectedFile = files[0];
         fileInput.value = '';
         resetState();
-        // Show file ready bar
         uploadArea.style.display = 'none';
         if (fileReadyBar) fileReadyBar.style.display = 'flex';
         if (selectedFileNameEl) selectedFileNameEl.textContent = selectedFile.name;
@@ -712,7 +964,6 @@ uploadArea.addEventListener('drop', e => {
     }
 });
 
-// File input: show file ready bar on selection
 const btnProcess = document.getElementById('btn-process');
 
 fileInput.addEventListener('change', e => {
@@ -726,7 +977,6 @@ fileInput.addEventListener('change', e => {
     }
 });
 
-// Process button
 if (btnProcess) {
     btnProcess.addEventListener('click', () => {
         if (selectedFile) { loadConfig(); processExcel(selectedFile); }
@@ -734,7 +984,6 @@ if (btnProcess) {
     });
 }
 
-// Clear file button
 const clearFileBtn = document.getElementById('clearFileBtn');
 if (clearFileBtn) {
     clearFileBtn.addEventListener('click', () => {
@@ -742,53 +991,22 @@ if (clearFileBtn) {
         fileInput.value = '';
         if (btnProcess) btnProcess.disabled = true;
         resetState();
-        // Show dropzone, hide file ready bar
         uploadArea.style.display = '';
         if (fileReadyBar) fileReadyBar.style.display = 'none';
     });
 }
 
-// ─── UI Panel Toggles (Config & Info) ────────────────────────────────────────
-
+// ─── Config panel toggle ──────────────────────────────────────────────────────
 const configToggleBtn = document.getElementById('configToggleBtn');
 const configSection   = document.getElementById('configSection');
-const infoToggleBtn   = document.getElementById('infoToggleBtn');
-const infoSection     = document.getElementById('infoSection');
 
-// Helper funkció a panelek váltásához
-function togglePanel(button, sectionToOpen, sectionToClose) {
-    if (!button || !sectionToOpen) return;
-
-    const isVisible = sectionToOpen.style.display !== 'none';
-    
-    // Aktuális panel váltása
-    sectionToOpen.style.display = isVisible ? 'none' : 'block';
-    button.classList.toggle('active', !isVisible);
-
-    // A másik panel bezárása, ha nyitva lenne
-    if (!isVisible && sectionToClose) {
-        sectionToClose.style.display = 'none';
-        // Megkeressük a másik gombot az ID alapján a stílus levételéhez
-        const otherBtn = sectionToClose.id === 'configSection' ? configToggleBtn : infoToggleBtn;
-        if (otherBtn) otherBtn.classList.remove('active');
-    }
-}
-
-// Config gomb eseménykezelő
-if (configToggleBtn) {
+if (configToggleBtn && configSection) {
     configToggleBtn.addEventListener('click', () => {
-        togglePanel(configToggleBtn, configSection, infoSection);
+        const isVisible = configSection.style.display !== 'none';
+        configSection.style.display = isVisible ? 'none' : 'block';
+        configToggleBtn.classList.toggle('active', !isVisible);
     });
 }
-
-// Info gomb eseménykezelő
-if (infoToggleBtn) {
-    infoToggleBtn.addEventListener('click', () => {
-        togglePanel(infoToggleBtn, infoSection, configSection);
-    });
-}
-
-// Bezáró gombok kezelése (X gombok a kártyák sarkában)
 const configCloseBtn = document.getElementById('configCloseBtn');
 if (configCloseBtn && configSection) {
     configCloseBtn.addEventListener('click', () => {
@@ -797,6 +1015,17 @@ if (configCloseBtn && configSection) {
     });
 }
 
+// ─── Info panel toggle ────────────────────────────────────────────────────────
+const infoToggleBtn = document.getElementById('infoToggleBtn');
+const infoSection   = document.getElementById('infoSection');
+
+if (infoToggleBtn && infoSection) {
+    infoToggleBtn.addEventListener('click', () => {
+        const isVisible = infoSection.style.display !== 'none';
+        infoSection.style.display = isVisible ? 'none' : 'block';
+        infoToggleBtn.classList.toggle('active', !isVisible);
+    });
+}
 const infoCloseBtn = document.getElementById('infoCloseBtn');
 if (infoCloseBtn && infoSection) {
     infoCloseBtn.addEventListener('click', () => {
@@ -805,10 +1034,46 @@ if (infoCloseBtn && infoSection) {
     });
 }
 
+// ─── Rate search section toggle ───────────────────────────────────────────────
+const searchToggleBtn = document.getElementById('searchToggleBtn');
+const searchSection   = document.getElementById('searchSection');
+
+if (searchToggleBtn && searchSection) {
+    searchToggleBtn.addEventListener('click', () => {
+        const isVisible = searchSection.style.display !== 'none';
+        searchSection.style.display = isVisible ? 'none' : 'block';
+        searchToggleBtn.classList.toggle('active', !isVisible);
+    });
+}
+const searchCloseBtn = document.getElementById('searchCloseBtn');
+if (searchCloseBtn && searchSection) {
+    searchCloseBtn.addEventListener('click', () => {
+        searchSection.style.display = 'none';
+        if (searchToggleBtn) searchToggleBtn.classList.remove('active');
+    });
+}
+
+// Rate search button
+const rateSearchBtn  = document.getElementById('rateSearchBtn');
+const rateSearchDate = document.getElementById('rateSearchDate');
+if (rateSearchBtn && rateSearchDate) {
+    rateSearchBtn.addEventListener('click', () => {
+        renderRateSearchResult(rateSearchDate.value);
+    });
+    rateSearchDate.addEventListener('keydown', e => {
+        if (e.key === 'Enter') renderRateSearchResult(rateSearchDate.value);
+    });
+}
+
+// ─── Correction table export ──────────────────────────────────────────────────
+const exportCorrectionBtn = document.getElementById('exportCorrectionBtn');
+if (exportCorrectionBtn) {
+    exportCorrectionBtn.addEventListener('click', exportCorrectionToExcel);
+}
+
 // ─── Theme toggle ─────────────────────────────────────────────────────────────
 const themeToggleBtn = document.getElementById('themeToggleBtn');
 const themeIcon      = document.getElementById('themeIcon');
-
 if (themeToggleBtn) {
     themeToggleBtn.addEventListener('click', () => {
         const html   = document.documentElement;
@@ -828,11 +1093,11 @@ function processExcel(file) {
     const reader = new FileReader();
     reader.onload = e => {
         try {
-            const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-            const sheet = wb.Sheets[wb.SheetNames[0]];
+            const wb       = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+            const sheet    = wb.Sheets[wb.SheetNames[0]];
             const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-            rawExcelData  = jsonData;
-            processedData = processExcelData(jsonData, CONFIG.headerRow);
+            rawExcelData   = jsonData;
+            processedData  = processExcelData(jsonData, CONFIG.headerRow);
             if (processedData.length > 0) renderTable(processedData);
             else alert('Nincs feldolgozható adat az Excel fájlban!');
         } catch (err) {
@@ -856,7 +1121,7 @@ if (updateEl) {
 
 loadConfig();
 
-// Register custom DataTables search filter for "Csak problémás sorok"
+// Custom DataTables search filter for "Csak problémás sorok"
 $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
     if (!filterProblemOnly || !dataTable) return true;
     const rowNode = dataTable.row(dataIndex).node();
