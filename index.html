@@ -13,6 +13,8 @@
     
     <!-- Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.min.css">
     
     <style>
         .difference-positive {
@@ -53,12 +55,12 @@
             margin-top: 30px;
             overflow-x: auto;
         }
-      .generated-rate td:nth-child(6) {
+      .generated-rate td:nth-child(8) {
     position: relative;
     font-style: italic;
 }
 
-.generated-rate td:nth-child(6)::after {
+.generated-rate td:nth-child(8)::after {
     content: " *";
     color: #dc3545;
     font-weight: bold;
@@ -133,12 +135,12 @@
 }
 
 /* Generált árfolyam jelölés */
-.generated-rate td:nth-child(6) {
+.generated-rate td:nth-child(8) {
     position: relative;
     font-style: italic;
 }
 
-.generated-rate td:nth-child(6)::after {
+.generated-rate td:nth-child(8)::after {
     content: "";
 }
 
@@ -199,6 +201,38 @@
 #dataTable {
     width: 100% !important;
 }
+
+/* ── Audit Dashboard ─────────────────────────────── */
+#auditDashboard .card { border-radius: 12px; }
+#auditDashboard .rounded-3 { transition: transform .15s; }
+#auditDashboard .rounded-3:hover { transform: translateY(-2px); }
+
+/* ── Discrepancy row emphasis ────────────────────── */
+.difference-negative td { color: #842029; }
+.difference-positive td { color: #0f5132; }
+
+/* ── No-match row ────────────────────────────────── */
+tr.match-none { background-color: #f8d7da !important; }
+
+/* ── Source date nowrap ──────────────────────────── */
+.text-nowrap { white-space: nowrap; }
+
+/* ── Generated rate superscript ─────────────────── */
+sup.text-danger { font-size: 0.65em; cursor: help; }
+
+/* ── Legal feedback text ─────────────────────────── */
+.legal-feedback {
+    font-size: 0.72rem;
+    line-height: 1.35;
+    white-space: normal !important;
+    max-width: 320px;
+}
+td:has(.legal-feedback) { white-space: normal !important; min-width: 180px; }
+
+/* ── Non-helyes row highlight (light red) ────────── */
+/* Applied to kérdéses and nincs rows; overrides diff-class coloring */
+tr.legal-issue-row { background-color: #fff0f0 !important; }
+tr.legal-issue-row td { color: #5c1010; }
     </style>
 </head>
 <body>
@@ -233,6 +267,11 @@
                         <input type="text" class="form-control" id="configInvoiceNum" value="Számla száma">
                     </div>
                     <div class="col-md-3">
+                        <label class="form-label">Számla művelete oszlop <small class="text-muted">(opcionális)</small></label>
+                        <input type="text" class="form-control" id="configInvoiceOperation" value="Számla művelete"
+                               placeholder="pl. Számla művelete">
+                    </div>
+                    <div class="col-md-3">
                         <label class="form-label">Kiállítás dátuma oszlop</label>
                         <input type="text" class="form-control" id="configDate" value="Számla kelte">
                     </div>
@@ -264,90 +303,36 @@
                         <label class="form-label">Szűrés pénznem</label>
                         <input type="text" class="form-control" id="configCurrencyFilter" value="EUR" readonly class="bg-light">
                     </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Ügylettípus oszlop <small class="text-muted">(opcionális)</small></label>
+                        <input type="text" class="form-control" id="configTransactionType" value="Ügylettípus"
+                               placeholder="pl. Ügylettípus">
+                        <div class="form-text">KB / Előleg / Fordított / Időszakos / Egyéb</div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- MNB Árfolyam Politika Panel -->
+<!-- MNB info bar (replaces radio panel — categorization is now fully automatic) -->
 <div class="row mb-4">
     <div class="col-12">
-        <div class="card border-primary">
-            <div class="card-header bg-primary text-white">
-                <h5 class="card-title mb-0">
-                    <i class="fas fa-exchange-alt me-2"></i>
-                    Árfolyam választási szabályok
-                </h5>
+        <div class="alert alert-info d-flex align-items-center gap-3 py-2 mb-0" role="alert">
+            <i class="bi bi-bank2 fs-5 flex-shrink-0"></i>
+            <div class="small">
+                <strong>Automatikus jogi értékelés (ÁFA tv.):</strong>
+                <span class="ms-1">
+                    <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Jogilag helyes</span>
+                    = teljesítés napján érvényes MNB-árfolyam (T vagy T−1) &nbsp;|&nbsp;
+                    <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>Kérdéses</span>
+                    = más dátum &nbsp;|&nbsp;
+                    <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Nincs egyezés</span>
+                </span>
             </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-8">
-                        <div class="alert alert-info mb-3">
-                            <i class="fas fa-info-circle me-2"></i>
-                            <strong>ÁFA törvény szerint:</strong> A devizás számlán az ÁFA értékének meghatározásához a 
-                            <strong>teljesítés napján érvényes árfolyamot</strong> kell alkalmazni. 
-                            A számla kiállításának napján érvényes árfolyamot csak meghatározott esetekben 
-                            (előlegszámla, folyamatos teljesítés) kell használni.
-                        </div>
-                        
-                        <div class="form-check mb-2">
-                            <input class="form-check-input" type="radio" name="ratePolicy" 
-                                   id="policyPerformance" value="performance" checked>
-                            <label class="form-check-label" for="policyPerformance">
-                                <strong>Teljesítés dátuma szerint (ÁFA törvény szerinti főszabály)</strong>
-                                <br>
-                                <small class="text-muted">
-                                    Az ÁFA értékének meghatározásához a teljesítés napján érvényes árfolyamot kell használni.
-                                </small>
-                            </label>
-                        </div>
-                        
-                        <div class="form-check mb-2">
-                            <input class="form-check-input" type="radio" name="ratePolicy" 
-                                   id="policyIssue" value="issue">
-                            <label class="form-check-label" for="policyIssue">
-                                <strong>Kiállítás dátuma szerint (kivételes esetek)</strong>
-                                <br>
-                                <small class="text-muted">
-                                    Előlegszámla vagy folyamatos teljesítésű számla esetén a kiállítás napján érvényes árfolyam használható.
-                                </small>
-                            </label>
-                        </div>
-                        
-                        <div class="form-check mb-3">
-                            <input class="form-check-input" type="radio" name="ratePolicy" 
-                                   id="policyAuto" value="auto">
-                            <label class="form-check-label" for="policyAuto">
-                                <strong>Automatikus összehasonlítás</strong>
-                                <br>
-                                <small class="text-muted">
-                                    Mindkét dátum árfolyamát megjeleníti és jelzi, hogy melyikkel egyezik a számlán szereplő árfolyam.
-                                </small>
-                            </label>
-                        </div>
-                    </div>
-                    
-                    <div class="col-md-4">
-                        <div class="card bg-light">
-                            <div class="card-body">
-                                <h6 class="card-title">Aktuális választás:</h6>
-                                <div id="policyDescription" class="mb-2">
-                                    Teljesítés dátuma szerint (ÁFA törvény)
-                                </div>
-                                <div class="small text-muted">
-                                    <i class="fas fa-clock me-1"></i>
-                                    Utolsó MNB frissítés: <span id="updateMNB"></span>
-                                </div>
-                                <hr>
-                                <div class="small">
-                                    <strong>Elérhető árfolyamok száma:</strong> 
-                                    <span id="availableRatesCount"></span> nap
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <div class="ms-auto text-nowrap small text-muted">
+                <i class="bi bi-clock me-1"></i>MNB: <span id="updateMNB"></span>
+                &nbsp;|&nbsp;<span id="availableRatesCount"></span> nap
             </div>
         </div>
     </div>
@@ -379,6 +364,9 @@
 </div>
 
       
+<!-- Audit Dashboard (populated by renderDashboard) -->
+<div id="auditDashboard" class="row mb-4" style="display:none"></div>
+
 <!-- Data Table -->
 <div class="row">
     <div class="col-12">
@@ -387,19 +375,20 @@
                 <thead>
                     <tr>
                         <th>Számla sorszám</th>
-						<th>Egyezés típusa</th>
+                        <th title="A számla típusa / művelete a forrásból">Számla művelete</th>
+                        <th title="Ügylettípus a forrásból (pl. KB, Előleg, Fordított, Időszakos)">Ügylettípus</th>
+                        <th title="Az egyezés alapjául szolgáló dátum és jelleg">Forrás egyezés</th>
                         <th>Kiállítás dátuma</th>
                         <th>Teljesítés dátuma</th>
-                        <th>EUR összeg</th>
-                        <th>HUF összeg (Excel)</th>
-                        <th>EUR árfolyam (Excel)</th>
-                        <th>MNB árfolyam (teljesítés)</th>
-                        <th>MNB árfolyam (kiállítás)</th>
-                        <th>Egyező árfolyam</th>
-                        <th>Alkalmazott dátum</th>
-                        <th>Számított HUF</th>
-                        <th>Eltérés (HUF)</th>
+                        <th title="Devizás (EUR) nettó összeg a számlán">Számla nettó összege a számla pénznemében</th>
+                        <th title="A számlán alkalmazott árfolyam">Alkalmazott árfolyam</th>
+                        <th title="Forint nettó összeg a számlán – a forrás Excel fájlból, változtatás nélkül">Számla HUF összege (forrás)</th>
+                        <th title="A legjobb egyező MNB-árfolyam">Legv. forrás árfolyam</th>
+                        <th title="Az egyező MNB-árfolyam közzétételének dátuma (YYYY-MM-DD)">Forrás dátum</th>
+                        <th title="Devizás összeg × Legv. MNB-forrás árfolyam (saját számítás)">Számított HUF (MNB-alapú)</th>
+                        <th title="Számla HUF − Számított HUF">Eltérés (HUF)</th>
                         <th>Eltérés (%)</th>
+                        <th title="ÁFA jogszabályi megfelelőség">Jogi értékelés</th>
                     </tr>
                 </thead>
                 <tbody id="tableBody">
@@ -424,6 +413,7 @@
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.11.10/dayjs.min.js"></script>
     <script src="mnb_EUR.js"></script>
     <script>
 // Árfolyam típusok
@@ -526,6 +516,8 @@ function findRateInWindow(targetDate, targetRate, maxDays = 30) {
     
     return results.length > 0 ? results : null;
 }
+
+// findBestRateMatch – see app.js (full VAT-law logic with dual-rate & transaction type routing)
 
 // Előző munkanap keresése
 function getPreviousWorkingDay(date) {
