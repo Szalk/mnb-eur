@@ -10,14 +10,14 @@
     --font-mono: 'Fira Code', 'Cascadia Code', 'Consolas', 'Monaco', monospace;
 
     /* Type Scale */
-    --text-xs:   0.75rem;    /* 12px */
-    --text-sm:   0.875rem;   /* 14px */
-    --text-base: 1rem;       /* 16px */
-    --text-lg:   1.125rem;   /* 18px */
-    --text-xl:   1.25rem;    /* 20px */
-    --text-2xl:  1.5rem;     /* 24px */
-    --text-3xl:  1.875rem;   /* 30px */
-    --text-4xl:  2.25rem;    /* 36px */
+    --text-xs:   1rem;        /* 16px - Mostantól ez a legkisebb */
+    --text-sm:   1.125rem;    /* 18px */
+    --text-base: 1.25rem;     /* 20px - Az alapértelmezett szövegméret */
+    --text-lg:   1.5rem;      /* 24px */
+    --text-xl:   1.75rem;     /* 28px */
+    --text-2xl:  2rem;        /* 32px */
+    --text-3xl:  2.5rem;      /* 40px */
+    --text-4xl:  3rem;        /* 48px */
 
     /* Font Weights */
     --font-normal:   400;
@@ -71,8 +71,8 @@
 
 [data-bs-theme="light"] {
     /* Primary Brand – Indigo */
-    --primary:       #4F46E5;
-    --primary-hover: #4338CA;
+    --primary:       #46c3e5;
+    --primary-hover: #38caa9;
     --primary-light: #EEF2FF;
     --primary-rgb:   79, 70, 229;
 
@@ -120,8 +120,8 @@
 
 [data-bs-theme="dark"] {
     /* Primary Brand */
-    --primary:       #6366F1;
-    --primary-hover: #4F46E5;
+    --primary:       #46c3e5;
+    --primary-hover: #38caa9;
     --primary-light: rgba(99, 102, 241, 0.14);
     --primary-rgb:   99, 102, 241;
 
@@ -198,15 +198,36 @@ body {
         color var(--transition-base) var(--easing);
 }
 
-/* Scrollbar */
-::-webkit-scrollbar       { width: 7px; height: 7px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb {
-    background: var(--border-strong);
-    border-radius: var(--radius-full);
-    border: 2px solid var(--bg-primary);
+/* --- Egyértelműbb és vastagabb Scrollbar --- */
+::-webkit-scrollbar {
+    width: 12px;               /* 7px-ről 12px-re növelve a jobb foghatóságért */
+    height: 12px;              /* Vízszintes görgetőnél is */
 }
-::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+::-webkit-scrollbar-track {
+    background: var(--bg-secondary); /* Halvány háttér a sínnek, hogy látszódjon az útja */
+    border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb {
+    /* Erősebb szín az egyértelműségért */
+    background: var(--text-muted); 
+    border-radius: var(--radius-full);
+    /* A keret vastagsága adja meg a távolságot a sín szélétől (párnázottság) */
+    border: 3px solid var(--bg-secondary); 
+    transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    /* Hover állapotban sötétebb, hogy egyértelmű legyen az interakció */
+    background: var(--text-secondary); 
+}
+
+/* Firefox támogatás (opcionális, de ajánlott) */
+* {
+    scrollbar-width: auto; /* "thin" helyett "auto" a vastagsághoz */
+    scrollbar-color: var(--text-muted) var(--bg-secondary);
+}
 
 /* Focus */
 :focus-visible {
@@ -218,4 +239,21 @@ body {
 ::selection {
     background-color: var(--primary-light);
     color: var(--primary);
+}
+
+
+/* Teljesítés árnyalatok (Zöldek) */
+.badge-success-darker { background-color: #065f46; color: #fff; } /* Sötétzöld */
+.badge-success-medium { background-color: #10b981; color: #fff; } /* Középzöld */
+.badge-success-light  { background-color: #a7f3d0; color: #064e3b; } /* Világoszöld */
+
+/* Kiállítás árnyalatok (Kékek) */
+.badge-info-dark  { background-color: #1e40af; color: #fff; } /* Sötétkék */
+.badge-info-light { background-color: #bfdbfe; color: #1e3a8a; } /* Világoskék */
+
+/* Általános badge igazítás */
+.badge {
+    font-weight: 500;
+    padding: 0.5em 0.8em;
+    cursor: help; /* Jelzi a felhasználónak, hogy van tooltip */
 }
