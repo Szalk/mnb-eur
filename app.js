@@ -327,8 +327,9 @@ function processExcelData(data, headerRowIndex) {
         let difference = null, differencePercent = null, diffClass = '';
         if (hufAmount !== null && calculatedHuf !== null) {
             difference        = parseFloat((hufAmount - calculatedHuf).toFixed(2));
-            differencePercent = calculatedHuf !== 0
-                ? parseFloat((difference / calculatedHuf * 100).toFixed(2))
+            // Denominator is the source hufAmount (not the derived calculatedHuf)
+            differencePercent = (hufAmount !== 0)
+                ? parseFloat((difference / hufAmount * 100).toFixed(2))
                 : 0;
             diffClass = Math.abs(difference) < 0.5 ? 'difference-zero'
                        : difference > 0             ? 'difference-positive'
@@ -414,21 +415,21 @@ function renderDashboard(data) {
 }
 
 // ─── Table rendering ──────────────────────────────────────────────────────────
-// 14-column layout (0-based index → Excel column letter):
-//  0:A Számla sorszám    1:B Számla művelete   2:C Forrás egyezés
-//  3:D Kiállítás dátuma  4:E Teljesítés dátuma 5:F EUR összeg
-//  6:G Alkalmazott árf.  7:H HUF (Excel)        8:I Legv. forrás árf.
-//  9:J Forrás dátum     10:K Számított HUF      11:L Eltérés (HUF)
-// 12:M Eltérés (%)      13:N Jogi értékelés
-const NUM_COLS_IDX  = [5, 6, 7, 8, 10, 11, 12]; // numeric column indexes (0-based)
-const NUM_COLS_XLSX = ['F','G','H','I','K','L','M']; // matching Excel column letters
+// 15-column layout (0-based index → Excel column letter):
+//  0:A Számla sorszám    1:B Számla művelete   2:C Ügylettípus
+//  3:D Forrás egyezés    4:E Kiállítás dátuma  5:F Teljesítés dátuma
+//  6:G EUR összeg        7:H Alkalmazott árf.  8:I HUF (Excel)
+//  9:J Legv. forrás árf. 10:K Forrás dátum    11:L Számított HUF
+// 12:M Eltérés (HUF)    13:N Eltérés (%)      14:O Jogi értékelés
+const NUM_COLS_IDX  = [6, 7, 8, 9, 11, 12, 13]; // numeric column indexes (0-based)
+const NUM_COLS_XLSX = ['G','H','I','J','L','M','N']; // matching Excel column letters
 
 function renderTable(data) {
     tableBody.innerHTML = '';
     filterProblemOnly = false; // reset filter on each new dataset
 
     if (!data.length) {
-        tableBody.innerHTML = '<tr><td colspan="14" class="text-center">Nincs megjeleníthető adat</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="15" class="text-center">Nincs megjeleníthető adat</td></tr>';
         return;
     }
 
@@ -485,6 +486,7 @@ function renderTable(data) {
         tr.innerHTML = `
             <td>${row.invoiceNum || '-'}</td>
             <td>${row.invoiceOperation || '-'}</td>
+            <td>${row.txTypeValue || '-'}</td>
             <td class="text-center">${buildSourceBadge(row.bestMatch)}</td>
             <td>${row.issueDateDisplay}</td>
             <td>${row.performanceDateDisplay}</td>
@@ -578,11 +580,11 @@ function renderTable(data) {
             }
         ],
         pageLength: 25,
-        order: [[11, 'desc']], // Eltérés (HUF) descending
+        order: [[12, 'desc']], // Eltérés (HUF) descending
         columnDefs: [
-            { type: 'num',     targets: NUM_COLS_IDX.filter(i => i !== 12) },
-            { type: 'num-fmt', targets: [12] },
-            { type: 'string',  targets: [0, 1, 2, 3, 4, 9, 13] }
+            { type: 'num',     targets: NUM_COLS_IDX.filter(i => i !== 13) },
+            { type: 'num-fmt', targets: [13] },
+            { type: 'string',  targets: [0, 1, 2, 3, 4, 5, 10, 14] }
         ],
         destroy:   true,
         retrieve:  true,
@@ -609,6 +611,27 @@ function exportBodyFormatter(data, row, column, node) {
         return isNaN(n) ? '' : n; // raw JS number
     }
     return String(data).replace(/<[^>]+>/g, '').trim();
+}
+
+// ─── State reset ──────────────────────────────────────────────────────────────
+// Clears all previous-session state so a new upload always starts clean.
+function resetState() {
+    processedData     = [];
+    rawExcelData      = null;
+    filterProblemOnly = false;
+
+    if (tableBody) tableBody.innerHTML = '';
+
+    if (dataTable) {
+        dataTable.destroy();
+        dataTable = null;
+    }
+
+    const auditEl = document.getElementById('auditDashboard');
+    if (auditEl) auditEl.style.display = 'none';
+
+    const infoBar = document.querySelector('.generated-info');
+    if (infoBar) infoBar.remove();
 }
 
 // ─── Event handlers ───────────────────────────────────────────────────────────
@@ -639,6 +662,7 @@ fileInput.addEventListener('change', e => {
     if (e.target.files.length > 0) {
         selectedFile = e.target.files[0];
         btnProcess.disabled = false;
+        resetState(); // clear previous results immediately on new file selection
     }
 });
 
@@ -648,6 +672,7 @@ btnProcess.addEventListener('click', () => {
 });
 
 function processExcel(file) {
+    resetState(); // ensure a completely clean start before processing
     const reader = new FileReader();
     reader.onload = e => {
         try {
