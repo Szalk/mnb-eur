@@ -184,13 +184,11 @@
 }
 
 /* ===================================
-   LOADING SPINNER ANIMATION
+   LOADING SPINNER ANIMATIONS
    =================================== */
 
 @keyframes spinner-border {
-    to {
-        transform: rotate(360deg);
-    }
+    to { transform: rotate(360deg); }
 }
 
 .spinner-border {
@@ -202,6 +200,12 @@
     border-right-color: transparent;
     border-radius: 50%;
     animation: spinner-border 0.75s linear infinite;
+}
+
+/* Ring spinner (used in loading overlay) */
+@keyframes spin-ring {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
 }
 
 /* ===================================
