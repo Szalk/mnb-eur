@@ -37,7 +37,7 @@ function Get-MnbFullHistory {
         $webClient.Headers.Add("Content-Type", "text/xml; charset=utf-8")
         $webClient.Encoding = [System.Text.Encoding]::UTF8
 
-        Write-Host "Adatok letöltése..." -NoNewline
+        Write-Host "Adatok letoltese..." -NoNewline
         $response = $webClient.UploadString($url, $ca)
         Write-Host " OK" -ForegroundColor Green
 
@@ -93,18 +93,18 @@ function Get-MnbFullHistory {
         # JavaScript fájl mentése const változóval
         $jsContent = "const MNB_RATES = $jsonString;"
         $jsContent | Out-File -FilePath $jsFajl -Encoding utf8
-        Write-Host "JavaScript fájl létrehozva: $jsFajl" -ForegroundColor Green
+        Write-Host "Js fajl letrehozva: $jsFajl" -ForegroundColor Green
 
         # CSV fájl mentése
-        $csvHeader = "Datum,Erték,Generalt"
+        $csvHeader = "Datum,Ertek,Generalt_HETVEGE_1"
         $csvRows = $fullHistory | ForEach-Object {
             "$($_.d);$($_.e);$($_.g)"
         }
         $csvContent = @($csvHeader) + $csvRows
         $csvContent | Out-File -FilePath $csvFajl -Encoding utf8
-        Write-Host "CSV fájl létrehozva: $csvFajl" -ForegroundColor Green
+        Write-Host "CSV fajl létrehozva: $csvFajl" -ForegroundColor Green
 
-        Write-Host "Összes bejegyzés száma: $($fullHistory.Count)"
+        Write-Host "Osszes arfolyam szama: $($fullHistory.Count)"
     }
     catch {
         Write-Host " HIBA: $($_.Exception.Message)" -ForegroundColor Red
@@ -112,5 +112,5 @@ function Get-MnbFullHistory {
 }
 
 Get-MnbFullHistory
-Write-Host "`nBezarashoz nyomj meg egy gombot..."
+Write-Host "`nMinden kesz bezarhatod az ablakot..."
 $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
