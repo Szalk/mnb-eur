@@ -615,11 +615,12 @@ function exportCorrectionToExcel() {
     const wsData = [[
         'Számla azonosító',
         'Probléma típusa',
-        'EUR (excel)',
+        'EUR összeg',
+        'Alkalmazott árfolyam (számla)',
         'Számla HUF (excel)',
-        'Helyes MNB árfolyam',
-        'Helyes dátum',
-        'Korrigált HUF összeg',
+        'MNB árfolyam (helyes)',
+        'MNB dátum',
+        'Korrigált HUF',
         'Eltérés (HUF)'
     ]];
 
@@ -627,29 +628,118 @@ function exportCorrectionToExcel() {
     entries.forEach(({ r, entry }) => {
         const disc = entry.discrepancy ?? null;
         if (disc !== null) totalDisc += disc;
+        
         const typeLabel = entry.type === 'calc_error'
             ? 'Számítási hiba'
-            : r.legalFeedback.category === 'nincs' ? 'Nincs egyezés' : 'Kérdéses árfolyam';
+            : r.legalFeedback.category === 'nincs' 
+                ? 'Nincs egyezés' 
+                : 'Kérdéses árfolyam';
+        
+        const mnbDate = entry.rateDate || '';
+        const dateNote = entry.rateDateNote || '';
+        
         wsData.push([
             r.invoiceNum || '',
             typeLabel,
             fmtComma(r.eurAmount),
+            fmtComma(r.excelEurRate),
             fmtComma(r.hufAmount),
             fmtComma(entry.suggestedRate),
-            (entry.rateDate || '') + entry.rateDateNote,
+            mnbDate + dateNote,
             fmtComma(entry.correctedHuf),
             fmtComma(disc)
         ]);
     });
 
     // Footer: total impact row
-    wsData.push(['ÖSSZESEN', '', '', '', '', '', '', fmtComma(totalDisc)]);
+    wsData.push([
+        'ÖSSZESEN', 
+        '', 
+        '', 
+        '', 
+        '', 
+        '', 
+        '', 
+        fmtComma(totalDisc),
+        ''
+    ]);
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(wsData);
+    
+    // Oszlopszélességek beállítása
     ws['!cols'] = [
-        {wch:28},{wch:22},{wch:14},{wch:22},{wch:22},{wch:14},{wch:22},{wch:18}
+        { wch: 25 }, // Számla azonosító
+        { wch: 20 }, // Probléma típusa
+        { wch: 15 }, // EUR összeg
+        { wch: 22 }, // Alkalmazott árfolyam (számla)
+        { wch: 18 }, // Számla HUF (excel)
+        { wch: 20 }, // MNB árfolyam (helyes)
+        { wch: 16 }, // MNB dátum
+        { wch: 18 }, // Korrigált HUF
+        { wch: 18 }  // Eltérés (HUF)
     ];
+
+    // Fejléc formázása (vastag betű)
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let C = range.s.c; C <= range.e.c; C++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
+        if (!ws[cellAddress]) continue;
+        ws[cellAddress].s = {
+            font: { bold: true, sz: 11 },
+            fill: { fgColor: { rgb: "E6F0FA" } },
+            alignment: { horizontal: "center", vertical: "center" }
+        };
+    }
+
+    // Összesen sor formázása
+    const totalRow = wsData.length - 1;
+    for (let C = range.s.c; C <= range.e.c; C++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: totalRow, c: C });
+        if (!ws[cellAddress]) continue;
+        ws[cellAddress].s = {
+            font: { bold: true, sz: 11 },
+            fill: { fgColor: { rgb: "FFF2CC" } }
+        };
+    }
+
+    // Szám formátumok beállítása
+    for (let R = 1; R < wsData.length; R++) {
+        // EUR összeg (C oszlop)
+        let cell = XLSX.utils.encode_cell({ r: R, c: 2 });
+        if (ws[cell]) ws[cell].z = '#,##0.00';
+        
+        // Alkalmazott árfolyam (D oszlop)
+        cell = XLSX.utils.encode_cell({ r: R, c: 3 });
+        if (ws[cell]) ws[cell].z = '#,##0.0000';
+        
+        // Számla HUF (E oszlop)
+        cell = XLSX.utils.encode_cell({ r: R, c: 4 });
+        if (ws[cell]) ws[cell].z = '#,##0';
+        
+        // MNB árfolyam (F oszlop)
+        cell = XLSX.utils.encode_cell({ r: R, c: 5 });
+        if (ws[cell]) ws[cell].z = '#,##0.0000';
+        
+        // Korrigált HUF (H oszlop)
+        cell = XLSX.utils.encode_cell({ r: R, c: 7 });
+        if (ws[cell]) ws[cell].z = '#,##0';
+        
+        // Eltérés (I oszlop)
+        cell = XLSX.utils.encode_cell({ r: R, c: 8 });
+        if (ws[cell]) {
+            ws[cell].z = '#,##0';
+            // Eltérés színezése (pozitív zöld, negatív piros)
+            if (R < wsData.length - 1) { // Utolsó sor kivételével
+                const discValue = entries[R-1]?.entry?.discrepancy;
+                if (discValue > 0) {
+                    ws[cell].s = { font: { color: { rgb: "008000" }, bold: true } };
+                } else if (discValue < 0) {
+                    ws[cell].s = { font: { color: { rgb: "FF0000" }, bold: true } };
+                }
+            }
+        }
+    }
 
     XLSX.utils.book_append_sheet(wb, ws, 'Korrekciós elemzés');
 
@@ -657,6 +747,7 @@ function exportCorrectionToExcel() {
     const sfx = `${ts.slice(0,4)}${ts.slice(4,6)}${ts.slice(6,8)}`;
     XLSX.writeFile(wb, `mnb_korrekciok_${sfx}.xlsx`);
 }
+
 
 // ─── Rate lookup ──────────────────────────────────────────────────────────────
 // Implements the § 80 dual-rate display: on a workday show both T and T-1.
@@ -788,7 +879,7 @@ function renderTable(data) {
         const lf = row.legalFeedback;
 
         if (lf.category !== 'helyes') {
-            tr.classList.add('legal-issue-row');
+            tr.classList.add('table-danger');
         } else if (row.diffClass) {
             tr.className = row.diffClass;
         }
