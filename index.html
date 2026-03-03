@@ -66,7 +66,13 @@
         </button>        
 		<button class="topbar-icon-btn" id="infoToggleBtn" title="Jogi háttér">
             <i class="bi bi-book"></i>
+        </button>		
+		
+		<a href="felhasznaloi-leiras.html">
+		<button class="topbar-icon-btn" title="Felhasználói leírás">
+            <i class="bi bi-info-square"></i>
         </button>
+		</a>
 
         <!-- Theme toggle -->
         <button class="topbar-icon-btn" id="themeToggleBtn" title="Téma váltás">
@@ -328,7 +334,7 @@
                     <div class="col-auto">
                         <label class="form-label">Dátum kiválasztása</label>
                         <input type="date" class="form-control" id="rateSearchDate"
-                               style="min-width:180px">
+                               style="min-width:180px" max="9999-12-31">
                     </div>
                     <div class="col-auto">
                         <button class="btn btn-primary" id="rateSearchBtn">
@@ -415,7 +421,7 @@
                 <h2 class="content-card-title">Részletes kimutatás</h2>
             </div>
             <div class="table-container" id="tableContainer">
-                <table id="dataTable" class="table table-bordered" style="width:100%">
+                <table id="dataTable" class="table table-bordered table-hover" style="width:100%">
                     <thead>
                         <tr>
                             <th>Számla sorszám</th>
