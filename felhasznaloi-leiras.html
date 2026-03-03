@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Felhasználói leírás – MNB EUR Árfolyam Ellenőrző</title>
+  <title>Felhasználói leírás – MNB EURO árfolyam ellenőrző</title>
 
   <!-- Bootstrap 5.3 -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -238,12 +238,8 @@
     <span class="badge-pill mb-3 d-inline-block">
       <i class="bi bi-bank me-1"></i> Magyar Nemzeti Bank · Áfa tv. 80. §
     </span>
-    <h1 class="mb-3">MNB EUR Árfolyam Ellenőrző<br><span style="color:#4ade80;">Felhasználói útmutató</span></h1>
-    <p class="lead mb-4">
-      Szóval van egy eurós számlád és tudni akarod, hogy az alkalmazott árfolyam rendben van-e?
-      Ez az útmutató végigvezet az eszköz használatán – a feltöltéstől az Excel-exportig.
-    </p>
-    <a href="index.html" class="btn btn-success me-2">
+    <h1 class="mb-3">MNB EURO árfolyam ellenőrző<br><span style="color:#4ade80;">Felhasználói útmutató</span></h1>
+	    <a href="index.html" class="btn btn-success me-2">
       <i class="bi bi-arrow-left-circle me-1"></i> Vissza az alkalmazáshoz
     </a>
   </div>
@@ -287,12 +283,12 @@
         <h2 class="section-heading"><i class="bi bi-cloud-download me-2 text-success"></i>1. MNB adatok frissítése</h2>
         <p>
           Az eszköz a <strong>Magyar Nemzeti Bank</strong> webszolgáltatásából tölti le a hivatalos EUR árfolyamokat.
-          Az adatok nem frissülnek automatikusan – mielőtt elkezdel ellenőrizni, egyszer le kell tölteni őket.
+          Az adatok nem frissülnek automatikusan – mielőtt feltöltöd a számlaadatokat ellenőrid, hogy a számlák korábbiak legyenek, mint a mint a fejlécben látható <strong>Utolsó MNB adat frissítés</strong> időpontja.
         </p>
 
         <div class="step-card">
           <div class="step-num">1</div>
-          <div>Nyisd meg a program mappáját a fájlkezelőben.</div>
+          <div>Nyisd meg a program mappáját.</div>
         </div>
         <div class="step-card">
           <div class="step-num">2</div>
@@ -300,17 +296,17 @@
         </div>
         <div class="step-card">
           <div class="step-num">3</div>
-          <div>Egy fekete ablak jelenik meg, amely letölti az MNB árfolyamokat <strong>2021-től a mai napig</strong>. Ez általában néhány másodpercig tart.</div>
+          <div>Egy fekete ablak jelenik meg, amely letölti az MNB árfolyamokat <strong>2021-től a mai napig</strong>. Ez általában néhány másodpercig tart. Ha szükséged lenne rá, akkor az <code>src</code> mappában találsz egy <code>mnb_EUR.csv</code> nevű fájlt, amit Excelben meg tudsz nyitni és látod a napi árfolyamokat.</div>
         </div>
         <div class="step-card">
           <div class="step-num">4</div>
-          <div>Ha az ablak bezárult, kész vagy – a frissítés megtörtént.</div>
+          <div>Ha a letöltés befejeződött az ablak bezárható és a legfrissebb adatokat fogja használni az alkalmazás.</div>
         </div>
 
         <div class="tip-box mt-3">
           <i class="bi bi-lightbulb-fill text-success me-2"></i>
           <strong>Mikor érdemes frissíteni?</strong> Minden ellenőrzés előtt, vagy ha a fejlécben látható
-          <em>„Utolsó frissítés"</em> dátum régebbi, mint a vizsgálni kívánt számlák kelte.
+          <strong>Utolsó MNB adat frissítés</strong> dátum régebbi, mint a vizsgálni kívánt számlák kelte vagy teljesítés dátuma.
         </div>
       </section>
 
@@ -318,16 +314,17 @@
       <section id="feltoltes" class="mb-5">
         <h2 class="section-heading"><i class="bi bi-upload me-2 text-success"></i>2. Fájl feltöltése és oszlopok beállítása</h2>
 
-        <h5 class="fw-semibold mt-3 mb-2">Milyen fájlt fogad el az eszköz?</h5>
+        <h5 class="fw-semibold mt-3 mb-2">Milyen fájlt fogad el az alkalmazás?</h5>
         <p>
           Kizárólag <strong>Excel-fájlokat</strong> tudunk feldolgozni (<code>.xlsx</code> és <code>.xls</code>).
           A fájlban minden sornak egy számlát kell jelölnie.
         </p>
+		<span><strong>Alapbeállítás:</strong> Az alapértelmezett értékek az Adattárház (<code>rpt_<strong>szamla_szintu</strong>_adatok</code>) exportformátumhoz optimalizáltak. Csak egyedi esetekben szükséges módosítás. </span>
 
         <h5 class="fw-semibold mt-4 mb-2">Hogyan töltsd fel?</h5>
         <div class="step-card">
           <div class="step-num">1</div>
-          <div>Nyisd meg az <strong><code>index.html</code></strong> fájlt egy böngészőben (Chrome, Edge vagy Firefox).</div>
+          <div>Nyisd meg az <strong><code>index.html</code></strong> fájlt egy böngészőben.</div>
         </div>
         <div class="step-card">
           <div class="step-num">2</div>
@@ -345,7 +342,9 @@
         <h5 class="fw-semibold mt-4 mb-2"><i class="bi bi-gear me-1"></i> Oszlopok beállítása</h5>
         <p>
           Az eszköznek tudnia kell, melyik Excel-oszlopban mi szerepel.
-          Kattints a jobb felső sarokban lévő <strong>⚙ (fogaskerék)</strong> ikonra – megnyílik a konfiguráló panel.
+          Kattints a jobb felső sarokban lévő <button class="btn btn-primary" title="Oszlop-konfiguráció">
+            <i class="bi bi-sliders"></i>
+        </button> (beállítások) ikonra – megnyílik a konfiguráló panel.
         </p>
 
         <div class="table-responsive mt-2">
@@ -365,9 +364,9 @@
               <tr><td><strong>EUR összeg</strong></td><td>Az oszlop neve az EUR-ban kifejezett nettó összeghez</td></tr>
               <tr><td><strong>HUF összeg</strong></td><td>Az oszlop neve a forintban kifejezett nettó összeghez</td></tr>
               <tr><td><strong>Alkalmazott árfolyam</strong></td><td>Az oszlop neve a számlán szereplő devizaárfolyamhoz</td></tr>
-              <tr><td><strong>Ügylet típusa</strong></td><td>Az oszlop neve, amiből az ügylettípus azonosítható</td></tr>
-              <tr><td><strong>Fejléc sora</strong></td><td>Hanyadik sorban van a fejléc (alapértelmezés: 5)</td></tr>
+              <tr><td><strong>Fejléc sora</strong></td><td>Hanyadik sorban van a fejléc (alapértelmezés: 3, de ha ez nem fejléc akkor automatikusan a 1. sor)</td></tr>
               <tr><td><strong>Devizaszűrő</strong></td><td>Csak erre a devizanemre szűr az elemzés (alapértelmezés: EUR)</td></tr>
+			  <tr><td><strong>Egyéb oszlop az excelből</strong></td><td>Ha a kimutatásban egyéb oszlopra is szükség van akkor add meg a fejléc szövegét</td></tr>
             </tbody>
           </table>
         </div>
@@ -384,7 +383,9 @@
 
         <div class="step-card">
           <div class="step-num">1</div>
-          <div>A fájl feltöltése után kattints az <strong>„Elemzés indítása"</strong> gombra.</div>
+          <div>A fájl feltöltése után kattints a <button class="btn btn-primary">
+                    <i class="bi bi-cpu-fill"></i> Feldolgozás
+                </button> gombra.</div>
         </div>
         <div class="step-card">
           <div class="step-num">2</div>
@@ -414,7 +415,7 @@
           <div class="col-6 col-md-4 col-lg">
             <div class="stat-card">
               <div class="stat-num text-primary">48</div>
-              <div class="stat-label">Összes számla</div>
+              <div class="stat-label">Összes EUR számla</div>
             </div>
           </div>
           <div class="col-6 col-md-4 col-lg">
@@ -426,36 +427,35 @@
           <div class="col-6 col-md-4 col-lg">
             <div class="stat-card">
               <div class="stat-num" style="color:#1d4ed8;">4</div>
-              <div class="stat-label">Előző napi árfolyam</div>
+              <div class="stat-label">Jogilag kérdéses</div>
             </div>
           </div>
           <div class="col-6 col-md-4 col-lg">
             <div class="stat-card">
               <div class="stat-num text-warning">2</div>
-              <div class="stat-label">Kérdéses / Hiányzó</div>
+              <div class="stat-label">Nincs egyezés</div>
             </div>
           </div>
           <div class="col-6 col-md-4 col-lg">
             <div class="stat-card">
-              <div class="stat-num text-danger">−38 400 Ft</div>
-              <div class="stat-label">Pénzügyi eltérés</div>
+              <div class="stat-num text-danger">17</div>
+              <div class="stat-label">MNB előző napi (T−1)</div>
             </div>
           </div>
         </div>
-        <p class="text-muted" style="font-size:.82rem;"><em>* A fenti számok egy példa elemzés eredményei.</em></p>
 
-        <!-- Forrás jelvény -->
+        <!-- Egyezés jelölés -->
         <h5 class="fw-semibold mt-4 mb-3">A jogi minősítés – mit jelent a zöld, kék, sárga és piros?</h5>
-        <p>Minden számlasornál <strong>két jelzés</strong> látható egymás mellett:</p>
-
-        <h6 class="fw-bold mt-3 mb-2">1. Forrás jelvény <span class="text-muted fw-normal">(bal oldali kis badge)</span></h6>
+        <p>Kattints a jobb felső sarokban a <button class="btn btn-primary" title="Jogi háttér"> <i class="bi bi-book"></i></button> (jogi háttér) ikonra. A rendszer a leggyakoribb esetből indul ki, tehát a teljesítés napján érvényes MNB árfolyamot tekinti érvényesnek, de a számla típusától függően lehetséges más érvényes dátum is, ezeket kérdésesnek jelöli.
+</p>
+        <h6 class="fw-bold mt-3 mb-2">1. Egyezés jelölés</h6>
         <p>Ez megmutatja, hogy a számlán szereplő árfolyam melyik MNB-dátumhoz illeszthető:</p>
 
         <div class="table-responsive">
           <table class="table doc-table table-bordered">
             <thead>
               <tr>
-                <th>Jelvény</th>
+                <th>Jelölés</th>
                 <th>Szín</th>
                 <th>Felirat</th>
                 <th>Jelentés</th>
@@ -556,10 +556,10 @@
 
       <!-- ═══ 5. KORREKCIÓS ═══ -->
       <section id="korrekcios" class="mb-5">
-        <h2 class="section-heading"><i class="bi bi-exclamation-triangle me-2 text-success"></i>5. Pénzügyi Korrekciós Elemzés</h2>
+        <h2 class="section-heading"><i class="bi bi-exclamation-triangle me-2 text-success"></i>5. Pénzügyi korrekciós elemzés</h2>
         <p>
-          Ha az elemzés során valódi hiba kerül azonosításra, a részletes táblázat <strong>alatt</strong> automatikusan
-          megjelenik egy külön összefoglaló: a <strong>Pénzügyi Korrekciós Elemzés</strong>.
+          Ha az elemzés során valódi hiba kerül azonosításra, a fő táblázat <strong>alatt</strong> automatikusan
+          megjelenik egy külön összefoglaló: a <strong>Pénzügyi korrekciós elemzés</strong>.
         </p>
 
         <h6 class="fw-bold mt-3 mb-2">Mikor jelenik meg ez a táblázat?</h6>
@@ -582,7 +582,7 @@
 
         <div class="info-box mb-4">
           <i class="bi bi-info-circle-fill text-primary me-2"></i>
-          <strong>Fontos:</strong> Ha egy számlán az előző munkanapi (T−1) árfolyamot alkalmazták, de a forint összeg helyesen van kiszámítva, <strong>az a sor NEM kerül a korrekciós táblázatba</strong>. A T−1 árfolyam jogszerű üzleti döntés, nem hiba.
+          Ha egy számlán az előző munkanapi (T−1) árfolyamot alkalmazták, de a forint összeg helyesen van kiszámítva, <strong>az a sor NEM kerül a korrekciós táblázatba</strong>.
         </div>
 
         <h6 class="fw-bold mb-2">A korrekciós táblázat oszlopai</h6>
@@ -604,9 +604,9 @@
 
         <div class="warning-box mt-3">
           <i class="bi bi-calculator text-warning me-2"></i>
-          <strong>A lábléc sora – Teljes pénzügyi hatás:</strong> A táblázat alján látod az összes eltérés összegét.
-          <strong>Pozitív érték (piros):</strong> összességében a cég többet fizetett a kelleténél.
-          <strong>Negatív érték (zöld):</strong> összességében a cég kevesebbet fizetett a kelleténél.
+          <strong>A lábléc sora – Teljes pénzügyi hatás:</strong> A táblázat alján látod az összes eltérés összegét. Meg kell vizsgálni, hogy az eltérés érinti-e a bevallott adatokat.
+          <strong>Pozitív érték (zöld):</strong> összességében a cég többet számlázott, 
+          <strong>negatív érték (piros):</strong> összességében a cég kevesebbet számlázott a kelleténél.
         </div>
       </section>
 
@@ -614,17 +614,19 @@
       <section id="kereso" class="mb-5">
         <h2 class="section-heading"><i class="bi bi-search me-2 text-success"></i>6. Gyors MNB árfolyam-kereső</h2>
         <p>
-          A fejlécben lévő <strong>🔍 (kereső)</strong> ikonra kattintva megnyílik a Gyors Árfolyam-kereső panel.
-          Ide beírhatsz bármilyen dátumot, és azonnal megkapod az érvényes MNB EUR árfolyamot – anélkül, hogy Excelt kellene megnyitnod.
+          A fejlécben lévő <strong><button class="btn btn-primary" title="Gyors árfolyam-keresés">
+            <i class="bi bi-search"></i>
+        </button> (kereső)</strong> ikonra kattintva megnyílik a gyors árfolyam-kereső panel.
+          Ide beírhatsz bármilyen dátumot, és azonnal megkapod az érvényes MNB EUR árfolyamot – anélkül, hogy Excelt kellene megnyitnod. Ellenőrizd, hogy szükséges-e az MNB árfolyamok frissítése!
         </p>
 
         <div class="step-card">
           <div class="step-num">1</div>
-          <div>Írd be a keresett dátumot <strong>ÉÉÉÉ-HH-NN</strong> formátumban (pl. <code>2024-03-15</code>).</div>
+          <div>Írd be vagy válaszd ki a keresett dátumot.</div>
         </div>
         <div class="step-card">
           <div class="step-num">2</div>
-          <div>Kattints a <strong>„Keresés"</strong> gombra, vagy nyomj Entert.</div>
+          <div>Kattints az <button class="btn btn-primary"><i class="bi bi-search me-1"></i>Árfolyam lekérdezése</button> gombra vagy nyomj ENTER-t.</div>
         </div>
 
         <div class="row g-3 mt-2">
@@ -665,20 +667,13 @@
             <p class="small">
               A <strong>Pénzügyi Korrekciós Elemzés</strong> táblázat fejlécénél megjelenik az
               <strong>„Exportálás Excelbe"</strong> gomb. Erre kattintva letöltődik egy
-              <code>.xlsx</code> fájl, amely tartalmazza:
-            </p>
-            <ul class="small">
-              <li>Az összes problémás számla adatait</li>
-              <li>A lábléc sorban az összesített pénzügyi hatást</li>
-              <li>Az összes számot <strong>vesszővel</strong> mint tizedes elválasztóval (magyar könyvelési szoftverekkel kompatibilis)</li>
-            </ul>
+              <code>.xlsx</code> fájlként.
           </div>
           <div class="col-md-6">
             <h6 class="fw-semibold mb-2">Részletes táblázat exportálása</h6>
             <p class="small">
               A részletes táblázat felett exportálási lehetőségeket is találsz
-              <strong>(CSV formátum)</strong>, amellyel a teljes elemzés eredménye menthető
-              a saját könyvelési rendszeredbe való feldolgozáshoz.
+              <strong>(CSV és xlsx formátum)</strong>, amellyel a teljes elemzés eredménye menthető.
             </p>
           </div>
         </div>
@@ -702,12 +697,12 @@
             </p>
             <div class="screen-mock mb-3">
               <div class="sm-head">Elemzés eredménye</div>
-              <div>Forrás jelvény: <span class="sm-green">● Sötétzöld</span> – „Teljesítés · azonos nap"</div>
+              <div>Egyezés jelölés: <span class="sm-green">● Sötétzöld</span> – „Teljesítés · azonos nap"</div>
               <div>Jogi értékelés: <span class="sm-green">✅ Jogilag helyes</span></div>
               <div>Korrekciós táblázatba kerül-e: <span class="sm-green">Nem</span></div>
             </div>
             <div class="tip-box">
-              <strong>Teendő:</strong> Nincs teendő. Az árfolyam alkalmazása megfelel a jogszabályi előírásoknak.
+              <strong>Teendő:</strong> Nincs teendő. Az árfolyam alkalmazása megfelel a jogszabályi előírásoknak, <strong>HA</strong> a teljesítés napján lévő árfolyamot kell alkalmazni.
             </div>
           </div>
         </div>
@@ -726,7 +721,7 @@
             </p>
             <div class="screen-mock mb-3">
               <div class="sm-head">Elemzés eredménye</div>
-              <div>Forrás jelvény: <span class="sm-green">● Zöld</span> – „Teljesítés · előző nap"</div>
+              <div>Egyezés jelölés: <span class="sm-green">● Zöld</span> – „Teljesítés · előző nap"</div>
               <div>Jogi értékelés: <span class="sm-green">✅ Jogilag helyes</span></div>
               <div>Korrekciós táblázatba kerül-e: <span class="sm-green">Nem</span></div>
             </div>
@@ -750,7 +745,7 @@
             </p>
             <div class="screen-mock mb-3">
               <div class="sm-head">Elemzés eredménye</div>
-              <div>Forrás jelvény: <span class="sm-green">● Zöld</span> – „Teljesítés · azonos nap" <span style="color:#94a3b8;">(péntek = utolsó érvényes munkanap)</span></div>
+              <div>Egyezés jelölés: <span class="sm-green">● Zöld</span> – „Teljesítés · azonos nap" <span style="color:#94a3b8;">(péntek = utolsó érvényes munkanap)</span></div>
               <div>Jogi értékelés: <span class="sm-green">✅ Jogilag helyes</span></div>
             </div>
             <div class="tip-box">
@@ -774,7 +769,7 @@
             </p>
             <div class="screen-mock mb-3">
               <div class="sm-head">Elemzés eredménye</div>
-              <div>Forrás jelvény: <span class="sm-green">● Zöld</span> – az árfolyam helyes</div>
+              <div>Egyezés jelzés: <span class="sm-green">● Zöld</span> – az árfolyam helyes</div>
               <div>Jogi értékelés: <span class="sm-green">✅ Jogilag helyes (eltéréssel)</span></div>
               <div>Korrekciós táblázatba kerül-e: <span class="sm-yellow">Igen – „Számítási hiba"</span></div>
               <div>Eltérés: <span class="sm-red">+3 800 Ft</span> (alulszámlázás)</div>
@@ -800,15 +795,15 @@
             </p>
             <div class="screen-mock mb-3">
               <div class="sm-head">Elemzés eredménye</div>
-              <div>Forrás jelvény: <span class="sm-red">● Piros</span> – „Nincs egyezés"</div>
+              <div>Egyezés jelzés: <span class="sm-red">● Piros</span> – „Nincs egyezés"</div>
               <div>Jogi értékelés: <span class="sm-red">❌ Nincs egyezés</span></div>
               <div>Korrekciós táblázatba kerül-e: <span class="sm-red">Igen – „Nincs egyezés"</span></div>
               <div>A korrekciós táblázat megmutatja: mekkora lett volna a helyes összeg, és mekkora az eltérés</div>
             </div>
             <div class="p-3 rounded" style="background:#fff5f5;border:1px solid #fca5a5;border-left:4px solid #dc2626;">
               <strong>Teendő:</strong> A számlán szereplő árfolyam forrása ismeretlen
-              (pl. kereskedelmi bank árfolyama, saját számítás).
-              Egyeztesd a szállítóval, és kérj <strong>módosító számlát</strong>
+              (pl. kereskedelmi bank árfolyama, saját számítás). Nincs sem a kiállítás sem a teljesítés dátumához közel ilyen árfolyam. 
+              Egyeztetni kell az adózóval, <strong>módosító számlrára</strong> lehet szükség 
               a jogszerű MNB árfolyamon alapuló összeggel.
             </div>
           </div>
@@ -818,24 +813,13 @@
         <div class="example-card ex-blue mb-3">
           <div class="example-header">
             <span>🔵 6. példa</span>
-            <span>Közösségen belüli termékbeszerzés (KB) ügylettípus</span>
+            <span>Közösségen belüli termékbeszerzés ügylettípus</span>
           </div>
           <div class="example-body">
             <p class="mb-2">
-              <strong>Helyzet:</strong> Közösségen belüli termékbeszerzésnél (KB) az eszköz a
-              <strong>kiállítás napját</strong> veszi alapul (az Áfa tv. 80. §-a alapján),
-              nem a teljesítés napját. A számlán a kiállítás napjának T-árfolyamát alkalmazták.
+              <strong>Helyzet:</strong> Közösségen belüli termékbeszerzésnél <strong>kiállítás napját</strong> kell alapul venni (az Áfa tv. 80. §-a alapján),
+              nem a teljesítés napját. Ha a számlán a kiállítás napjának árfolyamát alkalmazták, ezt jelöli a rendszer.
             </p>
-            <div class="screen-mock mb-3">
-              <div class="sm-head">Elemzés eredménye</div>
-              <div>Forrás jelvény: <span class="sm-blue">● Kék</span> – „Kiállítás · azonos nap"</div>
-              <div>Jogi értékelés: <span class="sm-green">✅ Jogilag helyes</span></div>
-            </div>
-            <div class="tip-box">
-              <strong>Teendő:</strong> Nincs teendő. Az eszköz figyelembe veszi az ügylettípus-specifikus szabályokat:
-              KB, előleg, időszakos elszámolás és fordított adózás esetén a kiállítás napja az irányadó,
-              nem a teljesítés napja.
-            </div>
           </div>
         </div>
       </section>
@@ -843,8 +827,9 @@
       <!-- ═══ 9. JOGI HÁTTÉR ═══ -->
       <section id="jogi" class="mb-5">
         <h2 class="section-heading"><i class="bi bi-book me-2 text-success"></i>9. Jogi háttér összefoglalója</h2>
+		<p>Kattints a jobb felső sarokban a <button class="btn btn-primary" title="Jogi háttér"> <i class="bi bi-book"></i></button> (jogi háttér) ikonra.</p>
         <p>
-          Az eszköz az <strong>Általános forgalmi adóról szóló 2007. évi CXXVII. törvény 80. §-a</strong> alapján ellenőriz.
+          Az alkalmazás az <strong>Általános forgalmi adóról szóló 2007. évi CXXVII. törvény 80. §-a</strong> alapján ellenőriz.
           A következő szabályok épülnek be az elemzési logikába:
         </p>
 
@@ -901,8 +886,7 @@
         <div class="warning-box mt-4">
           <i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>
           <em>
-            Ez az eszköz tájékoztató jellegű segédeszköz. Az itt megjelenő eredmények nem helyettesítik
-            az adótanácsadói vagy könyvvizsgálói szakvéleményt. Kétes esetekben minden esetben kérj szakértő segítséget.
+            Ez az eszköz tájékoztató jellegű segédeszköz. A megjelenő eredményeket minden esetben felül kell vizsgálni!
           </em>
         </div>
       </section>
