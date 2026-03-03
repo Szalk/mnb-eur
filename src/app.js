@@ -548,8 +548,8 @@ function renderCorrectionTable(data) {
     const rowsHtml = entries.map(({ r, entry }) => {
         const discVal = entry.discrepancy;
         const discCls = discVal === null ? ''
-                      : discVal > 0     ? 'text-success fw-semibold'
-                      : discVal < 0     ? 'text-danger fw-semibold'
+                      : discVal > 0     ? 'text-danger fw-semibold'
+                      : discVal < 0     ? 'text-success fw-semibold'
                       :                   'text-muted';
         const typeBadge = entry.type === 'calc_error'
             ? '<span class="badge bg-warning text-dark">Számítási hiba</span>'
