@@ -776,8 +776,6 @@ function renderTable(data) {
 
         tr.innerHTML = `
             <td>${row.invoiceNum || '–'}</td>
-            <td>${row.invoiceOperation || '–'}</td>
-            <td>${row.txTypeValue || '–'}</td>
             <td class="text-center">${buildSourceBadge(row.bestMatch)}</td>
             <td>${row.issueDateDisplay}</td>
             <td>${row.performanceDateDisplay}</td>
@@ -789,6 +787,8 @@ function renderTable(data) {
             <td class="text-end" data-n="${row.calculatedHuf ?? ''}">${fmt(row.calculatedHuf, 2)}</td>
             <td class="text-end fw-semibold" data-n="${row.difference ?? ''}">${fmt(row.difference, 2)}</td>
             <td class="text-end" data-n="${row.differencePercent ?? ''}">${fmtPct(row.differencePercent)}</td>
+			<td>${row.invoiceOperation || '–'}</td>
+            <td>${row.txTypeValue || '–'}</td>
             <td class="small">${legalHtml}</td>`;
 
         tableBody.appendChild(tr);
@@ -833,7 +833,7 @@ function renderTable(data) {
     if (dataTable) dataTable.destroy();
     dataTable = $('#dataTable').DataTable({
         language: { url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/hu.json' },
-        dom: 'Bfrtip',
+        dom: '<"d-flex justify-content-between align-items-center mb-3"lBf>rtip',
         buttons: [
             {
                 text: '<i class="bi bi-funnel-fill me-1"></i>Csak problémás sorok',
@@ -883,6 +883,7 @@ function renderTable(data) {
             }
         ],
         pageLength: 25,
+		lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "Összes"]],
         order: [[12, 'desc']],
         columnDefs: [
             { type: 'num',     targets: NUM_COLS_IDX.filter(i => i !== 13) },
