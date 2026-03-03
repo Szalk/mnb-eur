@@ -558,9 +558,10 @@ function renderCorrectionTable(data) {
                 : '<span class="badge bg-warning text-dark">Kérdéses árfolyam</span>';
 
         return `<tr>
-            <td><span class="fw-medium">${r.invoiceNum || '–'}</span>
-                <div class="small mt-1">${typeBadge}</div></td>
+            <td><span class="fw-medium">${r.invoiceNum || '–'}</span></td>
+            <td><div class="small mt-1">${typeBadge}</div></td>
             <td class="text-end">${fmtHU(r.eurAmount)}</td>
+            <td class="text-end">${fmtHU(r.excelEurRate)}</td>
             <td class="text-end">${fmtHU(r.hufAmount)}</td>
             <td class="text-end fw-semibold text-primary">${fmtHU(entry.suggestedRate)}<br>
                 <small class="text-muted fw-normal">${entry.rateDate || '–'}${entry.rateDateNote}</small></td>
@@ -569,18 +570,20 @@ function renderCorrectionTable(data) {
         </tr>`;
     }).join('');
 
-    const totalCls = totalDisc > 0 ? 'text-danger' : totalDisc < 0 ? 'text-success' : '';
+    const totalCls = totalDisc > 0 ? 'text-success' : totalDisc < 0 ? 'text-danger' : '';
 
     container.innerHTML = `
         <table class="table table-bordered correction-table">
             <thead>
                 <tr>
                     <th>Számla azonosító</th>
-                    <th class="text-end" title="Devizás nettó összeg (EUR)">Forrás EUR</th>
-                    <th class="text-end" title="HUF összeg a számlán (forrásból)">Számla HUF (forrás)</th>
+                    <th title="Probléma">Probléma</th>
+                    <th class="text-end" title="Devizás nettó összeg (EUR)">Számla EUR</th>
+                    <th class="text-end" title="Alkalmazott árfolyam">Számla árfolyam</th>
+                    <th class="text-end" title="HUF összeg a számlán (excel)">Számla HUF</th>
                     <th class="text-end"
                         title="A jogilag helyes MNB-árfolyam: T (aktuális nap) vagy T-1 (előző nap) – mindkettő elfogadható § 80 alapján">
-                        Helyes MNB árfolyam</th>
+                        MNB árfolyam teljesítés napján</th>
                     <th class="text-end" title="EUR összeg × Helyes MNB árfolyam">
                         Korrigált HUF összeg</th>
                     <th class="text-end" title="Számla HUF − Korrigált HUF (pozitív = túlszámlázott)">
@@ -590,7 +593,7 @@ function renderCorrectionTable(data) {
             <tbody>${rowsHtml}</tbody>
             <tfoot>
                 <tr class="correction-total-row">
-                    <td colspan="5" class="text-end">
+                    <td colspan="7" class="text-end">
                         <strong>Teljes pénzügyi hatás (HUF):</strong>
                     </td>
                     <td class="text-end ${totalCls}">
@@ -612,8 +615,8 @@ function exportCorrectionToExcel() {
     const wsData = [[
         'Számla azonosító',
         'Probléma típusa',
-        'Forrás EUR',
-        'Számla HUF (forrás)',
+        'EUR (excel)',
+        'Számla HUF (excel)',
         'Helyes MNB árfolyam',
         'Helyes dátum',
         'Korrigált HUF összeg',
@@ -738,7 +741,7 @@ function renderRateSearchResult(dateStr) {
                     <div class="rate-result-label">Érvényes árfolyam (utolsó munkanap)</div>
                     <div class="rate-result-value">${fmtHU(currentResult.rate)}
                         <span class="rate-result-currency">HUF</span></div>
-                    <div class="rate-result-date-sub">Forrás dátum: ${validDate}</div>
+                    <div class="rate-result-date-sub">Excel dátum: ${validDate}</div>
                     <div class="rate-result-badge rate-result-badge--warning">
                         <i class="bi bi-info-circle-fill"></i>Csak ez az árfolyam érvényes
                     </div>
@@ -926,7 +929,7 @@ function renderTable(data) {
                 }
             }
         ],
-        pageLength: 25,
+        pageLength: 10,
 		lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "Összes"]],
         order: [[12, 'desc']],
         columnDefs: [
