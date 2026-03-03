@@ -372,7 +372,9 @@ function processExcelData(data, headerRowIndex) {
         // suggestedRate: the "correct" T-rate for the transaction's anchor date,
         // regardless of what was applied.  Used to show what SHOULD have been used.
         const { targetDate: resolvedTargetDate } = resolveTargetDate(txType, issueDateStr, perfDateStr);
-        const suggestedMnbResult = getMnbRate(resolvedTargetDate, RATE_TYPE.CURRENT_DAY);
+        // Try T-rate first; fall back to T-1 if no MNB data is available for that date range.
+        const suggestedMnbResult = getMnbRate(resolvedTargetDate, RATE_TYPE.CURRENT_DAY)
+                                ?? getMnbRate(resolvedTargetDate, RATE_TYPE.PREVIOUS_DAY);
         const suggestedRate      = suggestedMnbResult?.rate ?? null;
         const correctedHuf       = (eurAmount !== null && suggestedRate !== null)
             ? parseFloat((eurAmount * suggestedRate).toFixed(2))
@@ -478,52 +480,91 @@ function renderDashboard(data) {
         </div>`;
 }
 
+// ─── Correction entry resolver ────────────────────────────────────────────────
+// Determines whether a row belongs in the Correction Analysis table and, if so,
+// which rate/HUF/discrepancy values to display.
+//
+// Two inclusion criteria (§ 80 dual-rate rule):
+//   A) Invalid Rate  – the applied rate matches NEITHER the T-rate NOR the T-1
+//      rate on the correct anchor date.  Category: 'kérdéses' or 'nincs'.
+//      → Show the official T-rate for the anchor date as the suggested correction.
+//
+//   B) Calc Error    – the rate IS legally valid (T or T-1 exact match, category
+//      'helyes'), but EUR × rate ≠ invoice HUF (outside ±0.01 rounding tolerance).
+//      → Show the matched rate (which was correct) and the arithmetic discrepancy.
+//
+// Dual-rate immunity: 'helyes' rows where HUF arithmetic is correct (|diff| < 0.01)
+// are NEVER included, regardless of whether T or T-1 was used.  Using the previous
+// workday's MNB rate is a valid business decision under § 80.
+function getCorrectionEntry(r) {
+    if (r.legalFeedback.category === 'helyes') {
+        // Only a genuine arithmetic error qualifies for inclusion.
+        if (r.difference === null || Math.abs(r.difference) < 0.01) return null;
+        return {
+            type:         'calc_error',
+            suggestedRate: r.matchingRate,
+            rateDate:      r.bestMatch?.sourceDate || r.resolvedTargetDate,
+            rateDateNote:  r.bestMatch?.rateVersion === 'previous' ? ' (T−1)' : ' (T)',
+            correctedHuf:  r.calculatedHuf,
+            discrepancy:   r.difference
+        };
+    }
+    // Invalid rate: category 'kérdéses' or 'nincs'.
+    return {
+        type:         'invalid_rate',
+        suggestedRate: r.suggestedRate,
+        rateDate:      r.resolvedTargetDate,
+        rateDateNote:  '',
+        correctedHuf:  r.correctedHuf,
+        discrepancy:   r.correctionDiscrepancy
+    };
+}
+
 // ─── Financial Correction Analysis Table ─────────────────────────────────────
-// Shows rows where the rate is not legally correct OR where a significant HUF
-// discrepancy exists versus the correct MNB rate.
+// Shows only rows with a genuine compliance issue: invalid rate (A) or HUF
+// arithmetic error against the legally matched rate (B).  Legally valid rows
+// that use the previous day's rate are excluded (dual-rate immunity).
 function renderCorrectionTable(data) {
     const section   = document.getElementById('correctionSection');
     const container = document.getElementById('correctionTableContainer');
     const badge     = document.getElementById('correctionCount');
     if (!section || !container) return;
 
-    // Include: legally non-compliant OR HUF amount differs by more than 1 HUF
-    const rows = data.filter(r =>
-        r.legalFeedback.category !== 'helyes' ||
-        (r.correctionDiscrepancy !== null && Math.abs(r.correctionDiscrepancy) > 1)
-    );
+    const entries = data
+        .map(r => ({ r, entry: getCorrectionEntry(r) }))
+        .filter(({ entry }) => entry !== null);
 
-    if (!rows.length) {
+    if (!entries.length) {
         section.style.display = 'none';
         return;
     }
 
     section.style.display = '';
-    if (badge) badge.textContent = rows.length;
+    if (badge) badge.textContent = entries.length;
 
     let totalDisc = 0;
-    rows.forEach(r => { if (r.correctionDiscrepancy !== null) totalDisc += r.correctionDiscrepancy; });
+    entries.forEach(({ entry }) => { if (entry.discrepancy !== null) totalDisc += entry.discrepancy; });
 
-    const rowsHtml = rows.map(r => {
-        const discVal   = r.correctionDiscrepancy;
-        const discCls   = discVal === null ? ''
-                        : discVal > 0     ? 'text-danger fw-semibold'
-                        : discVal < 0     ? 'text-success fw-semibold'
-                        :                   'text-muted';
-        const legalBadge = r.legalFeedback.category === 'nincs'
-            ? '<span class="badge bg-danger">Nincs egyezés</span>'
-            : r.legalFeedback.category === 'kérdéses'
-                ? '<span class="badge bg-warning text-dark">Kérdéses</span>'
-                : '<span class="badge bg-success">Helyes</span>';
+    const rowsHtml = entries.map(({ r, entry }) => {
+        const discVal = entry.discrepancy;
+        const discCls = discVal === null ? ''
+                      : discVal > 0     ? 'text-danger fw-semibold'
+                      : discVal < 0     ? 'text-success fw-semibold'
+                      :                   'text-muted';
+        const typeBadge = entry.type === 'calc_error'
+            ? '<span class="badge bg-warning text-dark">Számítási hiba</span>'
+            : r.legalFeedback.category === 'nincs'
+                ? '<span class="badge bg-danger">Nincs egyezés</span>'
+                : '<span class="badge bg-warning text-dark">Kérdéses árfolyam</span>';
 
         return `<tr>
             <td><span class="fw-medium">${r.invoiceNum || '–'}</span>
-                <div class="small mt-1">${legalBadge}</div></td>
+                <div class="small mt-1">${typeBadge}</div></td>
             <td class="text-end">${fmtHU(r.eurAmount)}</td>
             <td class="text-end">${fmtHU(r.hufAmount)}</td>
-            <td class="text-end fw-semibold text-primary">${fmtHU(r.suggestedRate)}<br>
-                <small class="text-muted fw-normal">${r.resolvedTargetDate || '–'}</small></td>
-            <td class="text-end">${fmtHU(r.correctedHuf)}</td>
+            <td class="text-end fw-semibold text-primary">${fmtHU(entry.suggestedRate)}<br>
+                <small class="text-muted fw-normal">${entry.rateDate || '–'}${entry.rateDateNote}</small></td>
+            <td class="text-end">${fmtHU(entry.correctedHuf)}</td>
             <td class="text-end ${discCls}">${fmtHU(discVal)}</td>
         </tr>`;
     }).join('');
@@ -537,9 +578,10 @@ function renderCorrectionTable(data) {
                     <th>Számla azonosító</th>
                     <th class="text-end" title="Devizás nettó összeg (EUR)">Forrás EUR</th>
                     <th class="text-end" title="HUF összeg a számlán (forrásból)">Számla HUF (forrás)</th>
-                    <th class="text-end" title="Jogilag helyes MNB-árfolyam az ügylettípus szerinti dátumra (T)">
-                        Javasolt MNB árfolyam</th>
-                    <th class="text-end" title="EUR összeg × Javasolt MNB árfolyam">
+                    <th class="text-end"
+                        title="A jogilag helyes MNB-árfolyam: T (aktuális nap) vagy T-1 (előző nap) – mindkettő elfogadható § 80 alapján">
+                        Helyes MNB árfolyam</th>
+                    <th class="text-end" title="EUR összeg × Helyes MNB árfolyam">
                         Korrigált HUF összeg</th>
                     <th class="text-end" title="Számla HUF − Korrigált HUF (pozitív = túlszámlázott)">
                         Eltérés (HUF)</th>
@@ -561,36 +603,38 @@ function renderCorrectionTable(data) {
 
 // ─── Excel export for correction table ───────────────────────────────────────
 function exportCorrectionToExcel() {
-    const rows = processedData.filter(r =>
-        r.legalFeedback.category !== 'helyes' ||
-        (r.correctionDiscrepancy !== null && Math.abs(r.correctionDiscrepancy) > 1)
-    );
+    const entries = processedData
+        .map(r => ({ r, entry: getCorrectionEntry(r) }))
+        .filter(({ entry }) => entry !== null);
 
-    if (!rows.length) { alert('Nincs korrekciós adat az exportáláshoz!'); return; }
+    if (!entries.length) { alert('Nincs korrekciós adat az exportáláshoz!'); return; }
 
     const wsData = [[
         'Számla azonosító',
-        'Jogi értékelés',
+        'Probléma típusa',
         'Forrás EUR',
         'Számla HUF (forrás)',
-        'Javasolt MNB árfolyam',
+        'Helyes MNB árfolyam',
         'Helyes dátum',
         'Korrigált HUF összeg',
         'Eltérés (HUF)'
     ]];
 
     let totalDisc = 0;
-    rows.forEach(r => {
-        const disc = r.correctionDiscrepancy ?? null;
+    entries.forEach(({ r, entry }) => {
+        const disc = entry.discrepancy ?? null;
         if (disc !== null) totalDisc += disc;
+        const typeLabel = entry.type === 'calc_error'
+            ? 'Számítási hiba'
+            : r.legalFeedback.category === 'nincs' ? 'Nincs egyezés' : 'Kérdéses árfolyam';
         wsData.push([
             r.invoiceNum || '',
-            r.legalFeedback.label,
+            typeLabel,
             fmtComma(r.eurAmount),
             fmtComma(r.hufAmount),
-            fmtComma(r.suggestedRate),
-            r.resolvedTargetDate || '',
-            fmtComma(r.correctedHuf),
+            fmtComma(entry.suggestedRate),
+            (entry.rateDate || '') + entry.rateDateNote,
+            fmtComma(entry.correctedHuf),
             fmtComma(disc)
         ]);
     });
